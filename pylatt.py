@@ -1,24 +1,9 @@
 '''
-A simple lattice code in Python
-originally from Sam Krinsky's python code
-re-write in OOP style
-2012-11-17
-
-2012-12-10: simple parse to read mad8 input
-2012-12-20: clean namespace, remove "from numpy import ..."
-2013-04-17: 6d transport matrix replace 3d matrix
-2013-09-26: new kamp format to support 1st and 2nd kickmaps
-            remove txt2py, becuase its function can be realized
-            by txt2latt()+ savefile()
-2013-10-04: switch off insertion device, the optics without ID can
-            be set as the reference of beta-function correction
-2013-10-05: measure beat-beat response matrix
-2014-08-19: add many new functions
-2014-12-22: add dw radiation
+accelertor lattice in python 
 '''
 
-__version__ = 1.0
-__author__ = 'Yongjun Li, yli@bnl.gov or mpyliyj@hotmail.com'
+__version__ = 2.0
+__author__ = 'Yongjun Li, mpyliyj@gmail.com or mpyliyj@hotmail.com'
 
 import time,copy,string,sys,warnings
 import numpy as np
@@ -59,49 +44,61 @@ class drif(object):
         self.update()
 
     @property
-    def L():
+    def L(self):
         return self._L
 
     @L.setter
     def L(self,value):
         try:
-            self.L = float(value)
+            self._L = float(value)
             self.update()
         except:
-            raise RuntimeError('magnet length must be float (or convertible)')
+            raise RuntimeError('L must be float (or convertible)')
 
     @property
-    def Dx():
+    def Dx(self):
         return self._Dx
 
     @Dx.setter
     def Dx(self,value):
         try:
-            self.Dx = float(value)
+            self._Dx = float(value)
         except:
-            raise RuntimeError('misalignment must be float (or convertible)')
+            raise RuntimeError('Dx must be float (or convertible)')
 
     @property
-    def Dy():
+    def Dy(self):
         return self._Dy
 
     @Dy.setter
     def Dy(self,value):
         try:
-            self.Dy = float(value)
+            self._Dy = float(value)
         except:
-            raise RuntimeError('misalignment must be float (or convertible)')
+            raise RuntimeError('Dy must be float (or convertible)')
  
-   @property
-    def Dphi():
+    @property
+    def Dphi(self):
         return self._Dphi
 
     @Dy.setter
     def Dphi(self,value):
         try:
-            self.Dphi = float(value)
+            self._Dphi = float(value)
         except:
-            raise RuntimeError('misalignment must be float (or convertible)')
+            raise RuntimeError('Dphi must be float (or convertible)')
+
+    @property
+    def tm(self):
+        return self._tm
+
+    @property
+    def tx(self):
+        return self._tx
+
+    @property
+    def ty(self):
+        return self._ty
 
     def __repr__(self):
         return '%s: %s, L = %g'%(self.name,self.__class__.__name__,self.L)
@@ -119,20 +116,20 @@ class drif(object):
         '''
         calculate transport matrix
         '''
-        self.tm = np.mat(np.eye(6))
-        self.tm[0,1] = self.L
-        self.tm[2,3] = self.L
+        self._tm = np.eye(6)
+        self._tm[0,1] = self.L
+        self._tm[2,3] = self.L
 
     def twissmatrix(self):
         '''
         from transport matrix to twiss matrix
         '''
-        self.tx = trans2twiss(self.tm[0:2,0:2])
-        self.ty = trans2twiss(self.tm[2:4,2:4])
+        self._tx = trans2twiss(self.tm[0:2,0:2])
+        self._ty = trans2twiss(self.tm[2:4,2:4])
 
     def chklength(self):
         '''
-        check element length, no negative length is allowed
+        check element length, raise a warnning if negative length
         '''
         if self.L < 0.:
             warnings.warn('%s has a negative length, L = %f'%(self.name,self.L))
@@ -153,38 +150,48 @@ class drif(object):
 class matx(drif):
     '''
     matrix element
-    usage: matx(name='matrix',L=0)
+    usage: matx(name='matrix',L=0,Dx=0,Dy=0,Dphi=0)
     '''
-    def __init__(self,name='Matrix',L=0,mat=np.eye(6),Dx=0,Dy=0,Dphi=0):
-        self.L = float(L)
-        self.tm = np.mat(mat)
+    def __init__(self,name='Matrix',L=0,tm=np.eye(6),Dx=0,Dy=0,Dphi=0):
         self.name = str(name)
-        self.Dx = float(Dx)
-        self.Dy = float(Dy)
-        self.Dphi = float(Dphi)
+        self._L = float(L)
+        self._tm = np.mat(tm)
+        self._Dx = float(Dx)
+        self._Dy = float(Dy)
+        self._Dphi = float(Dphi)
         self.update()
+
+    @property
+    def tm(self):
+        return self._tm
+
+    @tm.setter
+    def tm(self,value):
+        try:
+            self._tm = np.array(value).reshape(6,6) 
+            self.update()
+        except:
+            raise RuntimeError('tm must be 6x6 float (or convertible)')
 
     def transmatrix(self):
         '''
-        calculate transport matrix
+        if the given matrix is not symplectic, raise error
         '''
-        if abs(np.linalg.det(self.tm)-1.) > 1.e6:
-            raise ValueError('Matrix determinant deviates from 1')
+        if abs(np.linalg.det(self.tm)-1.) > 1.e-6:
+            raise ValueError('linear matrix is not symplectic')
         if self.Dphi != 0.:
             r1 = rotmat(-self.Dphi)
             r0 = rotmat(self.Dphi)
-            self.tm = r1*self.tm*r0
+            self._tm = r1*self.tm*r0
 
     def sympass4(self,x0):
         '''
-        implement 4-th order symplectic pass
-        x0: the initial coordinates in phase space for m particles 
-            with a array format 6xm
-        pathlength could not be accurate for long matrix element
+        pathlength calculation is using the average of slopes at both
+        entrance and exit, which might not be so accurate
         '''
-        x = np.mat(np.array(x0,dtype=float)).reshape(6,-1)
+        x = np.array(x0,dtype=float).reshape(6,-1)
         x1p,y1p = x[1],x[3]
-        x = self.tm*x
+        x = np.dot(self.tm,x)
         x2p,y2p = x[1],x[3]
         xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
         x[4] += (np.sqrt(1.+np.square(xp)+np.square(yp))-1.)*self.L
@@ -4156,9 +4163,9 @@ def trans2twiss(a):
     input (a) is a 2x2 coordinate transport matrix
     return a 3x3 twiss transport matrix [beta, alfa, gama]
     '''
-    return np.mat([[a[0,0]**2,-2*a[0,0]*a[0,1],a[0,1]**2],
-                   [-a[1,0]*a[0,0],1+2*a[0,1]*a[1,0],-a[0,1]*a[1,1]],
-                   [a[1,0]**2,-2*a[1,1]*a[1,0],a[1,1]**2]])
+    return np.array([[a[0,0]**2,-2*a[0,0]*a[0,1],a[0,1]**2],
+                     [-a[1,0]*a[0,0],1+2*a[0,1]*a[1,0],-a[0,1]*a[1,1]],
+                     [a[1,0]**2,-2*a[1,1]*a[1,0],a[1,1]**2]])
 
 
 def matrix2twiss(R,plane='x'):
