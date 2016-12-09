@@ -662,10 +662,10 @@ class sext(drif):
 class kmap(drif):
     '''
     class: kmap - define a RADIA kickmap from an external text file
-    usage: kmap(name='IVU29',L=1.2,kmap2fn='cwd/ivu29_kmap.txt',E=3)
+    usage: ID01 = kmap(name='ID01',L=1.2,kmap2fn='cwd/ivu29_kmap.txt',E=3)
 
-    kmap1fn: 1st kickmap file name with directory info
-    kmap2fn: 2nd kickmap file name with directory info
+    kmap1fn: 1st order kickmap (strip line) file name with directory info
+    kmap2fn: 2nd order kickmap (magnet york) file name with directory info
     E: beam energy in GeV
 
     1. kickmap file itself includes a length. This definition will scale
@@ -675,28 +675,75 @@ class kmap(drif):
     normalized with a certain beam energy (3Gev by default). The kick unit
     is re-normalized to field unit.
     '''
-    def __init__(self,name='INS', L=0,
+    def __init__(self,name='ID01', L=0,
                  kmap1fn=None, kmap2fn=None,
-                 E=3,nk=100,Dx=0,Dy=0,Dphi=0,Bw=1.8,wavelen=0.1):
+                 E=3,nkick=20,Dx=0,Dy=0,Dphi=0,Bw=1.8,wavelen=0.1):
         self.name = str(name)
-        self.L = float(L)
-        self.kmap1fn = kmap1fn
-        self.kmap2fn = kmap2fn
-        self.E = float(E)
-        self.nk = int(nk)
-        self.Dx = float(Dx)
-        self.Dy = float(Dy)
-        self.Dphi = float(Dphi)
-        self.Bw = Bw
-        self.wavelen = wavelen
-        self.update()
+        self._L = float(L)
+        self._kmap1fn = kmap1fn
+        self._kmap2fn = kmap2fn
+        self._E = float(E)
+        self._nkick = int(nkick)
+        self._Dx = float(Dx)
+        self._Dy = float(Dy)
+        self._Dphi = float(Dphi)
+        self._Bw = Bw
+        self._wavelen = wavelen
+        self._update()
 
     def __repr__(self):
         return "%s: %s, L = %g, E =%8.4f, kmap1fn = '%s', kmap2fn = '%s'"%(
             self.name,self.__class__.__name__,self.L,self.E,
             self.kmap1fn,self.kmap2fn)
 
-    def transmatrix(self):
+    @property
+    def kmap1fn(self):
+        return self._kmap1fn
+
+    @kmap1fn.setter
+    def kmap1fn(self,value):
+        try:
+            self._kmap1fn = str(value)
+            self._update()
+        except:
+            raise RuntimeError('kmap1fn must be string (or convertible)')
+
+    @property
+    def kmap2fn(self):
+        return self._kmap2fn
+
+    @kmap2fn.setter
+    def kmap2fn(self,value):
+        try:
+            self._kmap2fn = str(value)
+            self._update()
+        except:
+            raise RuntimeError('kmap2fn must be string (or convertible)')
+
+    @property
+    def E(self):
+        return self._E
+
+    @E.setter
+    def E(self,value):
+        try:
+            self._E = float(value)
+            self._update()
+        except:
+            raise RuntimeError('E must be float (or convertible)')
+    @property
+    def Bw(self):
+        return self._Bw
+
+    @Bw.setter
+    def Bw(self,value):
+        try:
+            self._Bw = float(value)
+            self._update()
+        except:
+            raise RuntimeError('Bw must be float (or convertible)')
+
+    def _transmatrix(self):
         '''
         calculate transport matrix from kick map files
         first, read kick maps from given kick map files
@@ -720,7 +767,7 @@ class kmap(drif):
                 self.kmap2['unit'] = 'field'
         else:
             self.kmap2 = None
-        self.tm = kmap2matrix(self.kmap1, self.kmap2, self.E, self.nk)
+        self._tm = kmap2matrix(self.kmap1,self.kmap2,self.E,self.nkick)
         
 
 class quad(drif):
@@ -4818,9 +4865,9 @@ def elempassInv(ele, x0, nsk=4, nkk=50, nbk=10):
     return x0
 
 
-def readkmap(fn, L, E=3):
+def readkmap(fn,L,E=3):
     '''
-    read kick map from radia output, and scale the kick strength 
+    read kick map from "radia" output, and scale the kick strength 
     with the given length
     return a dict with scaled length and kick strengthes on the
     same grid as the kick map
@@ -4889,9 +4936,9 @@ def interp2d(x, y, z, xp, yp):
             if xi>x[-1] or xi<x[0] or yi>y[-1] or yi<y[0]:
                 zp = np.append(zp,np.nan)
             else:
-                nx2 = np.nonzero(x >= xi)[0][0]
+                nx2 = np.nonzero(x>=xi)[0][0]
                 nx1 = nx2-1
-                ny2 = np.nonzero(y >= yi)[0][0]
+                ny2 = np.nonzero(y>=yi)[0][0]
                 ny1 = ny2-1
                 x1 = x[nx1]
                 x2 = x[nx2]
@@ -4901,13 +4948,13 @@ def interp2d(x, y, z, xp, yp):
                 f21 = z[ny1, nx2]
                 f12 = z[ny2, nx1]
                 f22 = z[ny2, nx2]
-                zp = np.append(zp, (f11*(x2-xi)*(y2-yi) + f21*(xi-x1)*(y2-yi) +  \
-                                    f12*(x2-xi)*(yi-y1) + f22*(xi-x1)*(yi-y1)) / \
-                                   (x2-x1)/(y2-y1))
+                zp = np.append(zp,(f11*(x2-xi)*(y2-yi)+f21*(xi-x1)*(y2-yi)+  \
+                                   f12*(x2-xi)*(yi-y1)+f22*(xi-x1)*(yi-y1))/ \
+                               (x2-x1)/(y2-y1))
     return zp
 
 
-def kdid(kmap1, kmap2, E, x0, nk=50):
+def kdid(kmap1,kmap2,E,x0,nkick=20):
     '''
     Kick-Drfit through ID
     usage(kmap1, kmap2, E, X0, nk)
@@ -4916,36 +4963,36 @@ def kdid(kmap1, kmap2, E, x0, nk=50):
     kamp2:    2nd kick map dict (return from readkmap [see readkmap])
     E:        electron nominal energy in GeV
     x0:       vector at entrance, (x, x', y, y', z, delta)
-    nk:       number of kicks (100 by default)
+    nkick:    number of kicks (20 by default)
 
     returns
     X:        vector at entrance, (x, x', y, y', z, delta)
     '''
     if kmap1:
-        dl = kmap1['l']/(nk+1)
+        dl = kmap1['l']/(nkick+1)
     else:
-        dl = kmap2['l']/(nk+1)
+        dl = kmap2['l']/(nkick+1)
     X = np.copy(x0)
     BRho = E*1e9*(1.+X[5])/csp
     X[0] += X[1]*dl
     X[2] += X[3]*dl
-    for m in range(nk):
+    for m in range(nkick):
         if kmap1:
             kx = interp2d(kmap1['x'],kmap1['y'],kmap1['kx'],X[0],X[2])
             ky = interp2d(kmap1['x'],kmap1['y'],kmap1['ky'],X[0],X[2])
-            X[1] += kx/BRho/nk
-            X[3] += ky/BRho/nk
+            X[1] += kx/BRho/nkick
+            X[3] += ky/BRho/nkick
         if kmap2:    
             kx = interp2d(kmap2['x'],kmap2['y'],kmap2['kx'],X[0],X[2])
             ky = interp2d(kmap2['x'],kmap2['y'],kmap2['ky'],X[0],X[2])
-            X[1] += kx/BRho/BRho/nk
-            X[3] += ky/BRho/BRho/nk
+            X[1] += kx/BRho/BRho/nkick
+            X[3] += ky/BRho/BRho/nkick
         X[0] += X[1]*dl
         X[2] += X[3]*dl
     return X
 
 
-def kmap2matrix(kmap1, kmap2, E=3.0, nk=50, dx=1e-5):
+def kmap2matrix(kmap1,kmap2,E=3.0,nkick=20,dx=1e-5):
     '''
     first order derivative to get a matrix
     E:           electron nominal energy in GeV
@@ -4958,7 +5005,7 @@ def kmap2matrix(kmap1, kmap2, E=3.0, nk=50, dx=1e-5):
     for m in range(6):
         x0 = np.zeros(6)
         x0[m] += dx
-        X = kdid(kmap1, kmap2, E, x0, nk=nk)
+        X = kdid(kmap1,kmap2,E,x0,nkick=nkick)
         tm[:,m] = X/dx
     return tm
 
