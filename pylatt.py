@@ -25,7 +25,7 @@ twopi = 2*np.pi
 class drif(object):
     '''
     class: drif - define drift space with given name and length
-    usage: D1 = drif(name='D1',L=1.0,Dx=0,Dy=0,Dphi=0)
+    usage: D01 = drif(name='D01',L=1.0,Dx=0,Dy=0,Dphi=0)
 
     Parameter list:
     name:         element name
@@ -34,14 +34,17 @@ class drif(object):
     tm:           transport matrix 6x6
     tx,ty:        twiss matrics 3x3 for x and y plane
     '''
-    def __init__(self,name='D',L=0,Dx=0,Dy=0,Dphi=0):
+    def __init__(self,name='D01',L=0,Dx=0,Dy=0,Dphi=0):
         self.name = str(name)
         self._L = float(L)
         self._Dx = float(Dx)
         self._Dy = float(Dy)
         self._Dphi = float(Dphi)
-        self.tag = []
-        self.update()
+        self._nkick = 0
+        self._update()
+
+    def __repr__(self):
+        return '%s: %s, L = %g'%(self.name,self.__class__.__name__,self.L)
 
     @property
     def L(self):
@@ -51,7 +54,7 @@ class drif(object):
     def L(self,value):
         try:
             self._L = float(value)
-            self.update()
+            self._update()
         except:
             raise RuntimeError('L must be float (or convertible)')
 
@@ -81,12 +84,24 @@ class drif(object):
     def Dphi(self):
         return self._Dphi
 
-    @Dy.setter
+    @Dphi.setter
     def Dphi(self,value):
         try:
             self._Dphi = float(value)
         except:
             raise RuntimeError('Dphi must be float (or convertible)')
+
+    @property
+    def nkick(self):
+        return self._nkick
+
+    @nkick.setter
+    def nkick(self,value):
+        try:
+            self._nkick = int(value)
+            self._update()
+        except:
+            raise RuntimeError('nkick must be int (or convertible)')
 
     @property
     def tm(self):
@@ -100,19 +115,17 @@ class drif(object):
     def ty(self):
         return self._ty
 
-    def __repr__(self):
-        return '%s: %s, L = %g'%(self.name,self.__class__.__name__,self.L)
-    
-    def update(self):
+    def _update(self):
         '''
         check length
         update transport and Twiss matrices using current parameters
         '''
-        self.chklength()
-        self.transmatrix()
-        self.twissmatrix()
+        self._chklength()
+        self._transmatrix()
+        self._twissmatrix()
+        self.tag = []
 
-    def transmatrix(self):
+    def _transmatrix(self):
         '''
         calculate transport matrix
         '''
@@ -120,19 +133,20 @@ class drif(object):
         self._tm[0,1] = self.L
         self._tm[2,3] = self.L
 
-    def twissmatrix(self):
+    def _twissmatrix(self):
         '''
         from transport matrix to twiss matrix
         '''
         self._tx = trans2twiss(self.tm[0:2,0:2])
         self._ty = trans2twiss(self.tm[2:4,2:4])
 
-    def chklength(self):
+    def _chklength(self):
         '''
         check element length, raise a warnning if negative length
         '''
         if self.L < 0.:
-            warnings.warn('%s has a negative length, L = %f'%(self.name,self.L))
+            #warnings.warn('%s has a negative length, L = %f'%(self.name,self.L))
+            print('warning: %s has a negative length, L = %f'%(self.name,self.L))
 
     def sympass4(self,x0):
         '''
@@ -150,16 +164,16 @@ class drif(object):
 class matx(drif):
     '''
     matrix element
-    usage: matx(name='matrix',L=0,Dx=0,Dy=0,Dphi=0)
+    usage: matx(name='MAT01',L=0,Dx=0,Dy=0,Dphi=0)
     '''
-    def __init__(self,name='Matrix',L=0,tm=np.eye(6),Dx=0,Dy=0,Dphi=0):
+    def __init__(self,name='MAT01',L=0,tm=np.eye(6),Dx=0,Dy=0,Dphi=0):
         self.name = str(name)
         self._L = float(L)
-        self._tm = np.mat(tm)
+        self._tm = np.array(tm).reshape(6,6)
         self._Dx = float(Dx)
         self._Dy = float(Dy)
         self._Dphi = float(Dphi)
-        self.update()
+        self._update()
 
     @property
     def tm(self):
@@ -169,16 +183,17 @@ class matx(drif):
     def tm(self,value):
         try:
             self._tm = np.array(value).reshape(6,6) 
-            self.update()
+            self._update()
         except:
             raise RuntimeError('tm must be 6x6 float (or convertible)')
 
-    def transmatrix(self):
+    def _transmatrix(self):
         '''
-        if the given matrix is not symplectic, raise error
+        if the given matrix is not symplectic, print warning
         '''
         if abs(np.linalg.det(self.tm)-1.) > 1.e-6:
-            raise ValueError('linear matrix is not symplectic')
+            #warnings.warn('linear matrix is not symplectic')
+            print('warning: %s\'s linear matrix is not symplectic'%self.name)
         if self.Dphi != 0.:
             r1 = rotmat(-self.Dphi)
             r0 = rotmat(self.Dphi)
@@ -186,7 +201,7 @@ class matx(drif):
 
     def sympass4(self,x0):
         '''
-        pathlength calculation is using the average of slopes at both
+        path-length calculation is using the average of slopes at both
         entrance and exit, which might not be so accurate
         '''
         x = np.array(x0,dtype=float).reshape(6,-1)
@@ -201,34 +216,71 @@ class matx(drif):
 class moni(drif):
     '''
     monitor (BPM) with a default length 0
-    usage: moni(name='bpm1',L=0)
+    usage: BPM01 = moni(name='BPM01',L=0)
     '''
-    def __init__(self,name='M',L=0,Dx=0,Dy=0,Dphi=0):
-        self.L = float(L)
+    def __init__(self,name='BPM01',L=0,Dx=0,Dy=0,Dphi=0):
         self.name = str(name)
-        self.Dx = float(Dx)
-        self.Dy = float(Dy)
-        self.Dphi = float(Dphi)
-        self.update()
+        self._L = float(L)
+        self._Dx = float(Dx)
+        self._Dy = float(Dy)
+        self._Dphi = float(Dphi)
+        self._update()
 
 
 class rfca(drif):
     '''
-    RF cavity  with a default length 0
+    RF cavity with a default length 0
     voltage: RF voltage in V
     freq: RF frequency in Hz
-    usage: rfca(name='cavity',voltage=2e6,freq=0.5e9,L=0)
+    usage: rfc = rfca(name='RFC01',voltage=2e6,freq=0.5e9,L=0)
     '''
-    def __init__(self,name='rfca',L=0,voltage=2e6,
-                 freq=0.5e-9,Dx=0,Dy=0,Dphi=0):
-        self.L = float(L)
+    def __init__(self,name='RFC01',L=0,voltage=2e6,
+                 freq=0.5e9,phase=0,Dx=0,Dy=0,Dphi=0):
         self.name = str(name)
-        self.Dx = float(Dx)
-        self.Dy = float(Dy)
-        self.Dphi = float(Dphi)
-        self.voltage = float(voltage)
-        self.freq = float(freq)
-        self.update()
+        self._L = float(L)
+        self._Dx = float(Dx)
+        self._Dy = float(Dy)
+        self._Dphi = float(Dphi)
+        self._voltage = float(voltage)
+        self._freq = float(freq)
+        self._phase = float(phase)
+        self._update()
+
+    @property
+    def voltage(self):
+        return self._voltage
+
+    @voltage.setter
+    def voltage(self,value):
+        try:
+            self._voltage = float(value)
+            self.update()
+        except:
+            raise RuntimeError('voltage must be float (or convertible)')
+
+    @property
+    def freq(self):
+        return self._freq
+
+    @freq.setter
+    def freq(self,value):
+        try:
+            self._freq = float(value)
+            self.update()
+        except:
+            raise RuntimeError('freq must be float (or convertible)')
+
+    @property
+    def phase(self):
+        return self._phase
+
+    @phase.setter
+    def phase(self,value):
+        try:
+            self._phase = float(value)
+            self.update()
+        except:
+            raise RuntimeError('phase must be float (or convertible)')
 
 
 class kick(drif):
@@ -236,90 +288,153 @@ class kick(drif):
     kick with a default length 0
     usage: kick(name='kick',L=0,hkick=0,vkick=0)
     '''
-    def __init__(self,name='C',L=0,hkick=0,vkick=0,nkick=2,Dx=0,Dy=0,Dphi=0):
-        self.L = float(L)
+    def __init__(self,name='KICK',L=0,hkick=0,vkick=0,nkick=1,Dx=0,Dy=0,Dphi=0):
         self.name = str(name)
-        self.hkick = float(hkick)
-        self.vkick = float(vkick)
-        self.nkick = int(nkick)
-        self.Dx = float(Dx)
-        self.Dy = float(Dy)
-        self.Dphi = float(Dphi)
-        self.update()
+        self._L = float(L)
+        self._hkick = float(hkick)
+        self._vkick = float(vkick)
+        self._nkick = int(nkick)
+        self._Dx = float(Dx)
+        self._Dy = float(Dy)
+        self._Dphi = float(Dphi)
+        self._update()
 
     def __repr__(self):
         return '%s: %s, L = %g, hkick = %g, vkick = %g'%(
             self.name,self.__class__.__name__,self.L,self.hkick,self.vkick)
 
-    def update(self):
-        '''
-        check length
-        '''
-        super(kick,self).update()
-        if self.L != 0.:
-            self.setSympass()
+    @property
+    def hkick(self):
+        return self._hkick
 
-    def setSympass(self):
+    @hkick.setter
+    def hkick(self,value):
+        try:
+            self._hkick = float(value)
+            self._update()
+        except:
+            raise RuntimeError('hkick must be float (or convertible)')
+
+    @property
+    def vkick(self):
+        return self._vkick
+
+    @vkick.setter
+    def vkick(self,value):
+        try:
+            self._vkick = float(value)
+            self._update()
+        except:
+            raise RuntimeError('vkick must be float (or convertible)')
+
+    def _update(self):
+        super(kick,self)._update()
+        if self.L != 0.:
+            self._setSympass()
+        else:
+            self._nkick = 1
+
+    def _setSympass(self):
         '''
-        settings for implement 2-nd symplectic pass
+        set symplectic pass
         '''
-        self.dL = self.L/(self.nkick*2)
-        self.Ma = np.eye(6)
-        self.Ma[0,1],self.Ma[2,3] = self.dL,self.dL
+        a =  0.675603595979828664
+        b = -0.175603595979828664
+        g =  1.351207191959657328
+        d = -1.702414383919314656
+        self._dL = self.L/self.nkick
+        self._Ma = np.eye(6)
+        self._Ma[0,1] = a*self._dL
+        self._Ma[2,3] = self._Ma[0,1]
+        self._Mb = np.eye(6)
+        self._Mb[0,1] = b*self._dL
+        self._Mb[2,3] = self._Mb[0,1]
+        self._KhLg = g*self.hkick/self.nkick
+        self._KvLg = g*self.vkick/self.nkick
+        self._KhLd = d*self.hkick/self.nkick
+        self._KvLd = d*self.vkick/self.nkick
 
     def sympass4(self,x0):
         '''
         implement 4-th order symplectic pass (actually 2-nd here)
-        x0: the initial coordinates in phase space for m particles 
-            with a array format 6xm
-        pathlength could not be accurate for a long kick element
         '''
-        x = np.mat(np.array(x0,dtype=float)).reshape(6,-1)
+        x = np.array(x0,dtype=float).reshape(6,-1)
+
+        if self.Dphi != 0:
+            x = np.dot(rotmat(self.Dphi),x)
+
         if self.L != 0:
+            S = 0
             for i in xrange(self.nkick):
                 x1p,y1p = x[1],x[3]
-                x = self.Ma*x
-                x[1] += self.hkick/self.nkick/(1+x[5])
-                x[3] += self.vkick/self.nkick/(1+x[5])
-                x = self.Ma*x
+                x =  np.dot(self.Ma,x)
+                x[1] += self.KhLg/(1.+x[5])
+                x[3] += self.KvLg/(1.+x[5])
+                x =  np.dot(self.Mb,x)
+                x[1] += self.KhLd/(1.+x[5])
+                x[3] += self.KvLd/(1.+x[5])
+                x =  np.dot(self.Mb,x)
+                x[1] += self.KhLg/(1.+x[5])
+                x[3] += self.KvLg/(1.+x[5])
+                x =  np.dot(self.Ma,x)
                 x2p,y2p = x[1],x[3]
                 xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
-                x[4] += (np.sqrt(1.+np.square(xp)+np.square(yp))-1.)*self.L
+                S += np.sqrt(1.+np.square(xp)+np.square(yp))*self._dL
+            x[4] += S-self.L
         else:
             x[1] += self.hkick/(1+x[5])
             x[3] += self.vkick/(1+x[5])
+
+        if self.Dphi != 0:
+            x = np.dot(rotmat(-self.Dphi),x)
+
         return x
 
 
 class aper(drif):
     '''
     class: aper - define a physical aperture with two dimension constraints
-    usage: aper(name='ap1',aper=[-0.02,0.02,-0.01,0.01])
+    usage: APER01 = aper(name='APER01',L=0,aper=[-0.02,0.02,-0.01,0.01])
     
-    notice: aperture is specfied by 4 parameters in sequence:
+    aperture is specfied by 4 parameters in sequence:
     [x_min,x_max,y_min,y_max]
-    correctness of aperture configuration can be self-checked
-    by calling selfcheck()
+    correctness of aperture configuration will be self-checked
     '''
-    def __init__(self,name='A',L=0,aper=[-1.,1.,-1.,1.],Dx=0,Dy=0,Dphi=0):
-        self.L = float(L)
+    def __init__(self,name='APER',L=0,aper=[-1.,1.,-1.,1.],Dx=0,Dy=0,Dphi=0):
         self.name = str(name)
-        self.aper = np.array(aper)
-        self.Dx = float(Dx)
-        self.Dy = float(Dy)
-        self.Dphi = float(Dphi)
-        self.selfcheck()
-        self.update()
+        self._L = float(L)
+        self._aper = np.array(aper,float)
+        self._Dx = float(Dx)
+        self._Dy = float(Dy)
+        self._Dphi = float(Dphi)
+        self._update()
 
-    def selfcheck(self):
+    @property
+    def aper(self):
+        return self._aper
+
+    @aper.setter
+    def aper(self,value):
+        try:
+            self._aper = np.array(value,float)
+            self._update()
+        except:
+            raise RuntimeError('aper must be 4 floats (or convertible)')
+
+    def _update(self):
+        super(aper,self)._update()
+        self._selfcheck()
+
+    def _selfcheck(self):
         '''
         check aperture dimension, if OK, return True, otherwise reture False
         aperture must have 4 parameters in a format: [x_min,x_max,y_min,y_max] 
         '''
         if len(self.aper) != 4:
-            raise ValueError('aperture dimension must be 4')
+            print('warning: %s\'s aperture dimension is not 4'%self.name)
         if self.aper[0]>=self.aper[1] or self.aper[2]>=self.aper[3]:
-            raise ValueError('aperture format: [x_min,x_max,y_min,y_max]')
+            print('warning: %s\'s aperture format should be [x_min,x_max,y_min,y_max]'%self.name)
+
     '''
     def sympass4(self,x0):
         x = super(aper,self).sympass4(x0)
@@ -333,37 +448,45 @@ class aper(drif):
     '''
 
 class octu(drif):
-    def __init__(self,name='oct01',L=0,K3=0,nkick=4,Dx=0,Dy=0,Dphi=0):
-        self.L = float(L)
+    '''
+    class: octu - define octupole with K3
+    usage: OCT01 = octu(name='OCT01',L=0.1)
+    '''
+    def __init__(self,name='OCT01',L=0,K3=0,nkick=4,Dx=0,Dy=0,Dphi=0):
         self.name = str(name)
-        self.K3 = float(K3)
-        self.nkick = int(nkick)
-        self.Dx = float(Dx)
-        self.Dy = float(Dy)
-        self.Dphi = float(Dphi)
+        self._L = float(L)
+        self._K3 = float(K3)
+        self._nkick = int(nkick)
+        self._Dx = float(Dx)
+        self._Dy = float(Dy)
+        self._Dphi = float(Dphi)
         self.update()
    
     def __repr__(self):
         return '%s: %s, L = %g, K3 = %15.8f'%(
             self.name,self.__class__.__name__,self.L,self.K3)
 
-    def transmatrix(self,secondOrder=False):
-        '''
-        calculate transport matrix
-        '''
-        self.tm = np.mat(np.eye(6))
-        self.tm[0,1] = self.L
-        self.tm[2,3] = self.L
+    @property
+    def K3(self):
+        return self._K3
 
-    def update(self):
+    @K3.setter
+    def K3(self,value):
+        try:
+            self._K3 = float(value)
+            self._update()
+        except:
+            raise RuntimeError('K3 must be float (or convertible)')
+
+    def _update(self):
         '''
         update transport (M) and Twiss (Nx,y) matrices with current 
         element parameters, settings for 4th order symplectic pass
         '''
-        super(octu,self).update()
-        self.setSympass()
+        super(octu,self)._update()
+        self._setSympass()
 
-    def setSympass(self):
+    def _setSympass(self):
         '''
         set symplectic pass
         '''
@@ -372,108 +495,110 @@ class octu(drif):
             b = -0.175603595979828664
             g =  1.351207191959657328
             d = -1.702414383919314656
-            self.dL = self.L/self.nkick
-            self.Ma = np.mat(np.eye(6))
-            self.Ma[0,1] = a*self.dL
-            self.Ma[2,3] = self.Ma[0,1]
-            self.Mb = np.mat(np.eye(6))
-            self.Mb[0,1] = b*self.dL
-            self.Mb[2,3] = self.Mb[0,1]
-            self.K3Lg = g*self.K3*self.dL
-            self.K3Ld = d*self.K3*self.dL
+            self._dL = self.L/self.nkick
+            self._Ma = np.eye(6)
+            self._Ma[0,1] = a*self._dL
+            self._Ma[2,3] = self._Ma[0,1]
+            self._Mb = np.eye(6)
+            self._Mb[0,1] = b*self._dL
+            self._Mb[2,3] = self._Mb[0,1]
+            self._K3Lg = g*self.K3*self._dL
+            self._K3Ld = d*self.K3*self._dL
 
     def sympass4(self,x0):
         '''
         implement tracking with 4th order symplectic integrator
         '''
-        x = np.mat(np.array(x0,dtype=float)).reshape(6,-1)
-        if self.L != 0:
-            if self.K3 != 0.:
-                if self.Dx != 0:
-                    x[0] -= self.Dx
-                if self.Dy != 0:
-                    x[2] -= self.Dy
-                if self.Dphi != 0:
-                    x = rotmat(self.Dphi)*x
-                S = 0.
-                for i in range(self.nkick):
-                    x1p,y1p = x[1],x[3]
-                    x =  self.Ma*x
-                    x[1] -= self.K3Lg/6*(np.multiply(np.multiply(x[0],x[0]),x[0]) - \
-                                         3*np.multiply(x[0],np.multiply(x[2],x[2])))/(1.+x[5])
-                    x[3] -= self.K3Lg/6*(np.multiply(np.multiply(x[2],x[2]),x[2]) - \
-                                         3*np.multiply(x[2],np.multiply(x[0],x[0])))/(1.+x[5])
-                    x =  self.Mb*x
-                    x[1] -= self.K3Ld/6*(np.multiply(np.multiply(x[0],x[0]),x[0]) - \
-                                         3*np.multiply(x[0],np.multiply(x[2],x[2])))/(1.+x[5])
-                    x[3] -= self.K3Ld/6*(np.multiply(np.multiply(x[2],x[2]),x[2]) - \
-                                         3*np.multiply(x[2],np.multiply(x[0],x[0])))/(1.+x[5])
-                    x =  self.Mb*x
-                    x[1] -= self.K3Lg/6*(np.multiply(np.multiply(x[0],x[0]),x[0]) - \
-                                         3*np.multiply(x[0],np.multiply(x[2],x[2])))/(1.+x[5])
-                    x[3] -= self.K3Lg/6*(np.multiply(np.multiply(x[2],x[2]),x[2]) - \
-                                         3*np.multiply(x[2],np.multiply(x[0],x[0])))/(1.+x[5])
-                    x =  self.Ma*x
-                    x2p,y2p = x[1],x[3]
-                    xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
-                    S += np.sqrt(1.+np.square(xp)+np.square(yp))*self.dL
-                if self.Dphi != 0:
-                    x = rotmat(-self.Dphi)*x
-                if self.Dy != 0:
-                    x[2] += self.Dy
-                if self.Dx != 0:
-                    x[0] += self.Dx
-                x[4] += S-self.L
-                return x    
-            else:
-                return super(octu,self).sympass4(x)
+        x = np.array(x0,dtype=float).reshape(6,-1)
+        if self.L != 0: and self.K3 != 0:
+            if self.Dx != 0:
+                x[0] -= self.Dx
+            if self.Dy != 0:
+                x[2] -= self.Dy
+            if self.Dphi != 0:
+                x = np.dot(rotmat(self.Dphi),x)
+            S = 0.
+            for i in range(self.nkick):
+                x1p,y1p = x[1],x[3]
+                x =  np.dot(self.Ma,x)
+                x[1] -= self.K3Lg/6*(np.multiply(np.multiply(x[0],x[0]),x[0]) - \
+                                     3*np.multiply(x[0],np.multiply(x[2],x[2])))/(1.+x[5])
+                x[3] -= self.K3Lg/6*(np.multiply(np.multiply(x[2],x[2]),x[2]) - \
+                                     3*np.multiply(x[2],np.multiply(x[0],x[0])))/(1.+x[5])
+                x =  np.dot(self.Mb,x)
+                x[1] -= self.K3Ld/6*(np.multiply(np.multiply(x[0],x[0]),x[0]) - \
+                                     3*np.multiply(x[0],np.multiply(x[2],x[2])))/(1.+x[5])
+                x[3] -= self.K3Ld/6*(np.multiply(np.multiply(x[2],x[2]),x[2]) - \
+                                     3*np.multiply(x[2],np.multiply(x[0],x[0])))/(1.+x[5])
+                x =  np.dot(self.Mb,x)
+                x[1] -= self.K3Lg/6*(np.multiply(np.multiply(x[0],x[0]),x[0]) - \
+                                     3*np.multiply(x[0],np.multiply(x[2],x[2])))/(1.+x[5])
+                x[3] -= self.K3Lg/6*(np.multiply(np.multiply(x[2],x[2]),x[2]) - \
+                                     3*np.multiply(x[2],np.multiply(x[0],x[0])))/(1.+x[5])
+                x =  np.dot(self.Ma,x)
+                x2p,y2p = x[1],x[3]
+                xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
+                S += np.sqrt(1.+np.square(xp)+np.square(yp))*self._dL
+            if self.Dphi != 0:
+                x = np.dot(rotmat(-self.Dphi),x)
+            if self.Dy != 0:
+                x[2] += self.Dy
+            if self.Dx != 0:
+                x[0] += self.Dx
+            x[4] += S-self.L
+            return x    
         else:
-            x[1] -= self.K3/6*(np.multiply(np.multiply(x[0],x[0]),x[0]) - \
-                                 3*np.multiply(x[0],np.multiply(x[2],x[2])))/(1.+x[5])
-            x[3] -= self.K3/6*(np.multiply(np.multiply(x[2],x[2]),x[2]) - \
-                                 3*np.multiply(x[2],np.multiply(x[0],x[0])))/(1.+x[5])
-            return x
-
+            return super(octu,self).sympass4(x)
+        #else:
+        #    x[1] -= self.K3/6*(np.multiply(np.multiply(x[0],x[0]),x[0]) - \
+        #                         3*np.multiply(x[0],np.multiply(x[2],x[2])))/(1.+x[5])
+        #    x[3] -= self.K3/6*(np.multiply(np.multiply(x[2],x[2]),x[2]) - \
+        #                         3*np.multiply(x[2],np.multiply(x[0],x[0])))/(1.+x[5])
+        #    return x
     
 
 class sext(drif):
     '''
     class: sext - define setupole with length and K2
-    usage: sext(name='S1',L=0.25,K2=1.2)
+    usage: SEXT01 = sext(name='SEXT01',L=0.25,K2=1.0)
     
     K2 = 1/(B*Rho)*d(dB/dx)/dx - MAD definition
     '''
-    def __init__(self,name='S',L=0,K2=0,nkick=4,Dx=0,Dy=0,Dphi=0):
-        self.L = float(L)
+    def __init__(self,name='SEXT01',L=0,K2=0,nkick=4,Dx=0,Dy=0,Dphi=0):
         self.name = str(name)
-        self.K2 = float(K2)
-        self.nkick = int(nkick)
-        self.Dx = float(Dx)
-        self.Dy = float(Dy)
-        self.Dphi = float(Dphi)
-        self.update()
+        self._L = float(L)
+        self._K2 = float(K2)
+        self._nkick = int(nkick)
+        self._Dx = float(Dx)
+        self._Dy = float(Dy)
+        self._Dphi = float(Dphi)
+        self._update()
    
     def __repr__(self):
         return '%s: %s, L = %g, K2 = %15.8f'%(
             self.name,self.__class__.__name__,self.L,self.K2)
 
-    def transmatrix(self,secondOrder=False):
-        '''
-        calculate transport matrix
-        '''
-        self.tm = np.mat(np.eye(6))
-        self.tm[0,1] = self.L
-        self.tm[2,3] = self.L
+    @property
+    def K2(self):
+        return self._K2
 
-    def update(self):
+    @K2.setter
+    def K2(self,value):
+        try:
+            self._K2 = float(value)
+            self._update()
+        except:
+            raise RuntimeError('K2 must be float (or convertible)')
+
+    def _update(self):
         '''
         update transport (M) and Twiss (Nx,y) matrices with current 
         element parameters, settings for 4th order symplectic pass
         '''
-        super(sext,self).update()
-        self.setSympass()
+        super(sext,self)._update()
+        self._setSympass()
 
-    def setSympass(self):
+    def _setSympass(self):
         '''
         set symplectic pass
         '''
@@ -481,55 +606,55 @@ class sext(drif):
         b = -0.175603595979828664
         g =  1.351207191959657328
         d = -1.702414383919314656
-        self.dL = self.L/self.nkick
-        self.Ma = np.mat(np.eye(6))
-        self.Ma[0,1] = a*self.dL
-        self.Ma[2,3] = self.Ma[0,1]
-        self.Mb = np.mat(np.eye(6))
-        self.Mb[0,1] = b*self.dL
-        self.Mb[2,3] = self.Mb[0,1]
-        self.K2Lg = g*self.K2*self.dL
-        self.K2Ld = d*self.K2*self.dL
+        self._dL = self.L/self.nkick
+        self._Ma = np.eye(6)
+        self._Ma[0,1] = a*self._dL
+        self._Ma[2,3] = self._Ma[0,1]
+        self._Mb = np.eye(6)
+        self._Mb[0,1] = b*self._dL
+        self._Mb[2,3] = self._Mb[0,1]
+        self._K2Lg = g*self.K2*self._dL
+        self._K2Ld = d*self.K2*self._dL
 
     def sympass4(self,x0):
         '''
         implement tracking with 4th order symplectic integrator
         '''
-        x = np.mat(np.array(x0,dtype=float)).reshape(6,-1)
+        x = np.array(x0,dtype=float).reshape(6,-1)
         if self.K2 != 0.:
             if self.Dx != 0:
                 x[0] -= self.Dx
             if self.Dy != 0:
                 x[2] -= self.Dy
             if self.Dphi != 0:
-                x = rotmat(self.Dphi)*x
+                x = np.dot(rotmat(self.Dphi),x)
             S = 0.
             for i in range(self.nkick):
                 x1p,y1p = x[1],x[3]
-                x =  self.Ma*x
+                x =  np.dot(self.Ma,x)
                 x[1] -= self.K2Lg/2*(np.multiply(x[0],x[0]) - \
                                      np.multiply(x[2],x[2]))/(1.+x[5])
                 x[3] += self.K2Lg*(np.multiply(x[0],x[2]))/(1.+x[5])
-                x =  self.Mb*x
+                x =  np.dot(self.Mb,x)
                 x[1] -= self.K2Ld/2*(np.multiply(x[0],x[0]) - \
                                      np.multiply(x[2],x[2]))/(1.+x[5])
                 x[3] += self.K2Ld*(np.multiply(x[0],x[2]))/(1.+x[5])
-                x =  self.Mb*x
+                x =  np.dot(self.Mb,x)
                 x[1] -= self.K2Lg/2*(np.multiply(x[0],x[0]) - \
                                      np.multiply(x[2],x[2]))/(1.+x[5])
                 x[3] += self.K2Lg*(np.multiply(x[0],x[2]))/(1.+x[5])
-                x =  self.Ma*x
+                x =  np.dot(self.Ma,x)
                 x2p,y2p = x[1],x[3]
                 xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
-                S += np.sqrt(1.+np.square(xp)+np.square(yp))*self.dL
+                S += np.sqrt(1.+np.square(xp)+np.square(yp))*self._dL
             if self.Dphi != 0:
-                x = rotmat(-self.Dphi)*x
+                x = np.dot(rotmat(-self.Dphi),x)
             if self.Dy != 0:
                 x[2] += self.Dy
             if self.Dx != 0:
                 x[0] += self.Dx
             x[4] += S-self.L
-            return x    
+            return x
         else:
             return super(sext,self).sympass4(x)
 
@@ -4040,14 +4165,14 @@ def rotmat(angle=np.pi/4):
     '''
     c = np.cos(angle)
     s = np.sin(angle)
-    m = np.identity(6)
+    m = np.eye(6)
     for i in range(4):
         m[i,i] = c
     m[0,2] = s
     m[1,3] = s
     m[2,0] = -s
     m[3,1] = -s
-    return(np.mat(m))
+    return m
 
 
 def gint(a,b):

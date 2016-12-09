@@ -6,7 +6,7 @@ def proptemp(name):
          "    def %s(self,value):\n"%name +\
          "        try:\n" +\
          "            self._%s = float(value)\n"%name +\
-         "            self.update()\n" +\
+         "            self._update()\n" +\
          "        except:\n" +\
          "            raise RuntimeError('%s must be float (or convertible)')\n"%name
     return a
