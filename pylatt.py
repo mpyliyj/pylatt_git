@@ -510,7 +510,7 @@ class octu(drif):
         implement tracking with 4th order symplectic integrator
         '''
         x = np.array(x0,dtype=float).reshape(6,-1)
-        if self.L != 0: and self.K3 != 0:
+        if self.L != 0 and self.K3 != 0:
             if self.Dx != 0:
                 x[0] -= self.Dx
             if self.Dy != 0:
