@@ -752,7 +752,7 @@ class kmap(drif):
         '''
         BRho = self.E*1e9/csp
         if self.kmap1fn:
-            self.kmap1 = readkmap(self.kmap1fn, self.L)
+            self.kmap1 = self._readkmap(self.kmap1fn)
             if self.kmap1['unit'] == 'kick':
                 self.kmap1['kx'] = self.kmap1['kx']*1e-6*BRho
                 self.kmap1['ky'] = self.kmap1['ky']*1e-6*BRho
@@ -760,15 +760,101 @@ class kmap(drif):
         else:
             self.kmap1 = None
         if self.kmap2fn:
-            self.kmap2 = readkmap(self.kmap2fn, self.L)
+            self.kmap2 = self._readkmap(self.kmap2fn)
             if self.kmap2['unit'] == 'kick':
                 self.kmap2['kx'] = self.kmap2['kx']*1e-6*BRho*BRho
                 self.kmap2['ky'] = self.kmap2['ky']*1e-6*BRho*BRho
                 self.kmap2['unit'] = 'field'
         else:
             self.kmap2 = None
-        self._tm = kmap2matrix(self.kmap1,self.kmap2,self.E,self.nkick)
+        self._tm = self._kmap2matrix()
         
+    def _readkmap(self,fn):
+        '''
+        read kick map from "radia" output, and scale the kick strength 
+        with the given length
+        return a dict with scaled length and kick strengthes on the
+        same grid as the kick map
+        l:      length
+        x:      h-axis
+        y:      v-axis
+        kx:     kick in h-plane (after scaled)
+        ky:     kick in v-plane (after scaled)
+        '''
+        try:
+            fid = open(fn,'r')
+            a = fid.readlines()
+        except:
+            raise IOError('I/O error: No such file or directory')
+        idlen = float(a[3].strip())
+        nx = int(a[5].strip())
+        ny = int(a[7].strip())
+        thetax = np.empty((ny,nx))
+        thetay = np.empty((ny,nx))
+        tabx = np.array([float(x) for x in a[10].strip().split() if x != ''])
+        taby = np.empty(ny)
+        if 'micro-rad' in a[8]:
+            unit = 'kick'
+        else:
+            unit = 'field'
+        # --- x-plane
+        for m in range(11, 11+ny):
+            i = m - 11
+            linelist = [float(x) for x in a[m].strip().split() if x != '']
+            taby[i] = linelist[0]
+            thetax[i] = np.array(linelist[1:])
+        # --- y-plane
+        for m in range(14+ny, 14+2*ny):
+            i = m - (14+ny)
+            linelist = [float(x) for x in a[m].strip().split() if x != '']
+            thetay[i] = np.array(linelist[1:])
+        return {'x':tabx, 'y':taby, 'unit':unit,
+                'kx':thetax*self.L/idlen, 'ky':thetay*self.L/idlen}
+
+    def sympass4(self,x0):
+        '''
+        Kick-Drfit through ID
+        '''
+        if self.kmap1:
+            dl = self.L/(self.nkick+1)
+        else:
+            dl = self.L/(self.nkick+1)
+        x = np.copy(x0)
+        BRho = self.E*1e9*(1.+x[5])/csp
+        x[0] += x[1]*dl
+        x[2] += x[3]*dl
+        for m in range(self.nkick):
+            if self.kmap1:
+                kx = interp2d(self.kmap1['x'],self.kmap1['y'],self.kmap1['kx'],x[0],x[2])
+                ky = interp2d(self.kmap1['x'],self.kmap1['y'],self.kmap1['ky'],x[0],x[2])
+                x[1] += kx/BRho/self.nkick
+                x[3] += ky/BRho/self.nkick
+            if self.kmap2:    
+                kx = interp2d(self.kmap2['x'],self.kmap2['y'],self.kmap2['kx'],x[0],x[2])
+                ky = interp2d(self.kmap2['x'],self.kmap2['y'],self.kmap2['ky'],x[0],x[2])
+                x[1] += kx/BRho/BRho/self.nkick
+                x[3] += ky/BRho/BRho/self.nkick
+            x[0] += x[1]*dl
+            x[2] += x[3]*dl
+        return x
+
+    def _kmap2matrix(self,dx=1e-5):
+        '''
+        first order derivative to get a matrix
+        E:           electron nominal energy in GeV
+        kmap:        kickmap dict
+        scale:       kick map scaling factor
+        dx:          small coordinate shift to calculate
+                     derivative (1e-5 by default)
+        '''
+        tm = np.eye(6)
+        for m in range(6):
+            x0 = np.zeros(6)
+            x0[m] += dx
+            x = self.sympass4(x0)
+            tm[:,m] = x/dx
+        return tm
+
 
 class quad(drif):
     '''
@@ -4865,48 +4951,6 @@ def elempassInv(ele, x0, nsk=4, nkk=50, nbk=10):
     return x0
 
 
-def readkmap(fn,L,E=3):
-    '''
-    read kick map from "radia" output, and scale the kick strength 
-    with the given length
-    return a dict with scaled length and kick strengthes on the
-    same grid as the kick map
-    l:      length
-    x:      h-axis
-    y:      v-axis
-    kx:     kick in h-plane (after scaled)
-    ky:     kick in v-plane (after scaled)
-    '''
-    try:
-        fid = open(fn,'r')
-        a = fid.readlines()
-    except:
-        raise IOError('I/O error: No such file or directory')
-    idlen = float(a[3].strip())
-    nx = int(a[5].strip())
-    ny = int(a[7].strip())
-    thetax = np.empty((ny,nx))
-    thetay = np.empty((ny,nx))
-    tabx = np.array([float(x) for x in a[10].strip().split() if x != ''])
-    taby = np.empty(ny)
-    if 'micro-rad' in a[8]:
-        unit = 'kick'
-    else:
-        unit = 'field'
-    # --- x-plane
-    for m in range(11, 11+ny):
-        i = m - 11
-        linelist = [float(x) for x in a[m].strip().split() if x != '']
-        taby[i] = linelist[0]
-        thetax[i] = np.array(linelist[1:])
-    # --- y-plane
-    for m in range(14+ny, 14+2*ny):
-        i = m - (14+ny)
-        linelist = [float(x) for x in a[m].strip().split() if x != '']
-        thetay[i] = np.array(linelist[1:])
-    return {'l':L, 'x':tabx, 'y':taby, 'unit':unit,
-            'kx':thetax*L/idlen, 'ky':thetay*L/idlen}
-
 
 def interp2d(x, y, z, xp, yp):
     '''
@@ -4952,62 +4996,6 @@ def interp2d(x, y, z, xp, yp):
                                    f12*(x2-xi)*(yi-y1)+f22*(xi-x1)*(yi-y1))/ \
                                (x2-x1)/(y2-y1))
     return zp
-
-
-def kdid(kmap1,kmap2,E,x0,nkick=20):
-    '''
-    Kick-Drfit through ID
-    usage(kmap1, kmap2, E, X0, nk)
-
-    kamp1:    1st kick map dict (return from readkmap [see readkmap])
-    kamp2:    2nd kick map dict (return from readkmap [see readkmap])
-    E:        electron nominal energy in GeV
-    x0:       vector at entrance, (x, x', y, y', z, delta)
-    nkick:    number of kicks (20 by default)
-
-    returns
-    X:        vector at entrance, (x, x', y, y', z, delta)
-    '''
-    if kmap1:
-        dl = kmap1['l']/(nkick+1)
-    else:
-        dl = kmap2['l']/(nkick+1)
-    X = np.copy(x0)
-    BRho = E*1e9*(1.+X[5])/csp
-    X[0] += X[1]*dl
-    X[2] += X[3]*dl
-    for m in range(nkick):
-        if kmap1:
-            kx = interp2d(kmap1['x'],kmap1['y'],kmap1['kx'],X[0],X[2])
-            ky = interp2d(kmap1['x'],kmap1['y'],kmap1['ky'],X[0],X[2])
-            X[1] += kx/BRho/nkick
-            X[3] += ky/BRho/nkick
-        if kmap2:    
-            kx = interp2d(kmap2['x'],kmap2['y'],kmap2['kx'],X[0],X[2])
-            ky = interp2d(kmap2['x'],kmap2['y'],kmap2['ky'],X[0],X[2])
-            X[1] += kx/BRho/BRho/nkick
-            X[3] += ky/BRho/BRho/nkick
-        X[0] += X[1]*dl
-        X[2] += X[3]*dl
-    return X
-
-
-def kmap2matrix(kmap1,kmap2,E=3.0,nkick=20,dx=1e-5):
-    '''
-    first order derivative to get a matrix
-    E:           electron nominal energy in GeV
-    kmap:        kickmap dict
-    scale:       kick map scaling factor
-    dx:          small coordinate shift to calculate
-                 derivative (1e-5 by default)
-    '''
-    tm = np.eye(6)
-    for m in range(6):
-        x0 = np.zeros(6)
-        x0[m] += dx
-        X = kdid(kmap1,kmap2,E,x0,nkick=nkick)
-        tm[:,m] = X/dx
-    return tm
 
 
 def optm(beamline,var,con,wgh,xt=1.e-8,ft=1.e-8,
