@@ -34,13 +34,14 @@ class drif(object):
     tm:           transport matrix 6x6
     tx,ty:        twiss matrics 3x3 for x and y plane
     '''
-    def __init__(self,name='D01',L=0,Dx=0,Dy=0,Dphi=0):
+    def __init__(self,name='D01',L=0,Dx=0,Dy=0,Dphi=0,nkick=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._Dx = float(Dx)
         self._Dy = float(Dy)
         self._Dphi = float(Dphi)
-        self._nkick = 0
+        self._nkick = int(nkick)
+        self.tag = tag
         self._update()
 
     def __repr__(self):
@@ -123,7 +124,6 @@ class drif(object):
         self._chklength()
         self._transmatrix()
         self._twissmatrix()
-        self.tag = []
 
     def _transmatrix(self):
         '''
@@ -166,13 +166,14 @@ class matx(drif):
     matrix element
     usage: matx(name='MAT01',L=0,Dx=0,Dy=0,Dphi=0)
     '''
-    def __init__(self,name='MAT01',L=0,tm=np.eye(6),Dx=0,Dy=0,Dphi=0):
+    def __init__(self,name='MAT01',L=0,tm=np.eye(6),Dx=0,Dy=0,Dphi=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._tm = np.array(tm).reshape(6,6)
         self._Dx = float(Dx)
         self._Dy = float(Dy)
         self._Dphi = float(Dphi)
+        self.tag = tag
         self._update()
 
     @property
@@ -197,7 +198,7 @@ class matx(drif):
         if self.Dphi != 0.:
             r1 = rotmat(-self.Dphi)
             r0 = rotmat(self.Dphi)
-            self._tm = r1*self.tm*r0
+            self._tm = r1.dot(self.tm).dot(r0)
 
     def sympass4(self,x0):
         '''
@@ -367,16 +368,16 @@ class kick(drif):
             S = 0
             for i in xrange(self.nkick):
                 x1p,y1p = x[1],x[3]
-                x =  np.dot(self.Ma,x)
-                x[1] += self.KhLg/(1.+x[5])
-                x[3] += self.KvLg/(1.+x[5])
-                x =  np.dot(self.Mb,x)
-                x[1] += self.KhLd/(1.+x[5])
-                x[3] += self.KvLd/(1.+x[5])
-                x =  np.dot(self.Mb,x)
-                x[1] += self.KhLg/(1.+x[5])
-                x[3] += self.KvLg/(1.+x[5])
-                x =  np.dot(self.Ma,x)
+                x =  np.dot(self._Ma,x)
+                x[1] += self._KhLg/(1.+x[5])
+                x[3] += self._KvLg/(1.+x[5])
+                x =  np.dot(self._Mb,x)
+                x[1] += self._KhLd/(1.+x[5])
+                x[3] += self._KvLd/(1.+x[5])
+                x =  np.dot(self._Mb,x)
+                x[1] += self._KhLg/(1.+x[5])
+                x[3] += self._KvLg/(1.+x[5])
+                x =  np.dot(self._Ma,x)
                 x2p,y2p = x[1],x[3]
                 xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
                 S += np.sqrt(1.+np.square(xp)+np.square(yp))*self._dL
@@ -520,22 +521,22 @@ class octu(drif):
             S = 0.
             for i in range(self.nkick):
                 x1p,y1p = x[1],x[3]
-                x =  np.dot(self.Ma,x)
-                x[1] -= self.K3Lg/6*(np.multiply(np.multiply(x[0],x[0]),x[0]) - \
-                                     3*np.multiply(x[0],np.multiply(x[2],x[2])))/(1.+x[5])
-                x[3] -= self.K3Lg/6*(np.multiply(np.multiply(x[2],x[2]),x[2]) - \
+                x =  np.dot(self._Ma,x)
+                x[1] -= self._K3Lg/6*(np.multiply(np.multiply(x[0],x[0]),x[0]) - \
+                                      3*np.multiply(x[0],np.multiply(x[2],x[2])))/(1.+x[5])
+                x[3] -= self._K3Lg/6*(np.multiply(np.multiply(x[2],x[2]),x[2]) - \
                                      3*np.multiply(x[2],np.multiply(x[0],x[0])))/(1.+x[5])
-                x =  np.dot(self.Mb,x)
-                x[1] -= self.K3Ld/6*(np.multiply(np.multiply(x[0],x[0]),x[0]) - \
+                x =  np.dot(self._Mb,x)
+                x[1] -= self._K3Ld/6*(np.multiply(np.multiply(x[0],x[0]),x[0]) - \
                                      3*np.multiply(x[0],np.multiply(x[2],x[2])))/(1.+x[5])
-                x[3] -= self.K3Ld/6*(np.multiply(np.multiply(x[2],x[2]),x[2]) - \
+                x[3] -= self._K3Ld/6*(np.multiply(np.multiply(x[2],x[2]),x[2]) - \
                                      3*np.multiply(x[2],np.multiply(x[0],x[0])))/(1.+x[5])
-                x =  np.dot(self.Mb,x)
-                x[1] -= self.K3Lg/6*(np.multiply(np.multiply(x[0],x[0]),x[0]) - \
+                x =  np.dot(self._Mb,x)
+                x[1] -= self._K3Lg/6*(np.multiply(np.multiply(x[0],x[0]),x[0]) - \
                                      3*np.multiply(x[0],np.multiply(x[2],x[2])))/(1.+x[5])
-                x[3] -= self.K3Lg/6*(np.multiply(np.multiply(x[2],x[2]),x[2]) - \
+                x[3] -= self._K3Lg/6*(np.multiply(np.multiply(x[2],x[2]),x[2]) - \
                                      3*np.multiply(x[2],np.multiply(x[0],x[0])))/(1.+x[5])
-                x =  np.dot(self.Ma,x)
+                x =  np.dot(self._Ma,x)
                 x2p,y2p = x[1],x[3]
                 xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
                 S += np.sqrt(1.+np.square(xp)+np.square(yp))*self._dL
@@ -631,19 +632,19 @@ class sext(drif):
             S = 0.
             for i in range(self.nkick):
                 x1p,y1p = x[1],x[3]
-                x =  np.dot(self.Ma,x)
-                x[1] -= self.K2Lg/2*(np.multiply(x[0],x[0]) - \
+                x =  np.dot(self._Ma,x)
+                x[1] -= self._K2Lg/2*(np.multiply(x[0],x[0]) - \
                                      np.multiply(x[2],x[2]))/(1.+x[5])
-                x[3] += self.K2Lg*(np.multiply(x[0],x[2]))/(1.+x[5])
-                x =  np.dot(self.Mb,x)
-                x[1] -= self.K2Ld/2*(np.multiply(x[0],x[0]) - \
+                x[3] += self._K2Lg*(np.multiply(x[0],x[2]))/(1.+x[5])
+                x =  np.dot(self._Mb,x)
+                x[1] -= self._K2Ld/2*(np.multiply(x[0],x[0]) - \
                                      np.multiply(x[2],x[2]))/(1.+x[5])
-                x[3] += self.K2Ld*(np.multiply(x[0],x[2]))/(1.+x[5])
-                x =  np.dot(self.Mb,x)
-                x[1] -= self.K2Lg/2*(np.multiply(x[0],x[0]) - \
+                x[3] += self._K2Ld*(np.multiply(x[0],x[2]))/(1.+x[5])
+                x =  np.dot(self._Mb,x)
+                x[1] -= self._K2Lg/2*(np.multiply(x[0],x[0]) - \
                                      np.multiply(x[2],x[2]))/(1.+x[5])
-                x[3] += self.K2Lg*(np.multiply(x[0],x[2]))/(1.+x[5])
-                x =  np.dot(self.Ma,x)
+                x[3] += self._K2Lg*(np.multiply(x[0],x[2]))/(1.+x[5])
+                x =  np.dot(self._Ma,x)
                 x2p,y2p = x[1],x[3]
                 xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
                 S += np.sqrt(1.+np.square(xp)+np.square(yp))*self._dL
@@ -752,21 +753,21 @@ class kmap(drif):
         '''
         BRho = self.E*1e9/csp
         if self.kmap1fn:
-            self.kmap1 = self._readkmap(self.kmap1fn)
-            if self.kmap1['unit'] == 'kick':
-                self.kmap1['kx'] = self.kmap1['kx']*1e-6*BRho
-                self.kmap1['ky'] = self.kmap1['ky']*1e-6*BRho
-                self.kmap1['unit'] = 'field'
+            self._kmap1 = self._readkmap(self.kmap1fn)
+            if self._kmap1['unit'] == 'kick':
+                self._kmap1['kx'] = self._kmap1['kx']*1e-6*BRho
+                self._kmap1['ky'] = self._kmap1['ky']*1e-6*BRho
+                self._kmap1['unit'] = 'field'
         else:
-            self.kmap1 = None
+            self._kmap1 = None
         if self.kmap2fn:
-            self.kmap2 = self._readkmap(self.kmap2fn)
-            if self.kmap2['unit'] == 'kick':
-                self.kmap2['kx'] = self.kmap2['kx']*1e-6*BRho*BRho
-                self.kmap2['ky'] = self.kmap2['ky']*1e-6*BRho*BRho
-                self.kmap2['unit'] = 'field'
+            self._kmap2 = self._readkmap(self.kmap2fn)
+            if self._kmap2['unit'] == 'kick':
+                self._kmap2['kx'] = self._kmap2['kx']*1e-6*BRho*BRho
+                self._kmap2['ky'] = self._kmap2['ky']*1e-6*BRho*BRho
+                self._kmap2['unit'] = 'field'
         else:
-            self.kmap2 = None
+            self._kmap2 = None
         self._tm = self._kmap2matrix()
         
     def _readkmap(self,fn):
@@ -815,7 +816,7 @@ class kmap(drif):
         '''
         Kick-Drfit through ID
         '''
-        if self.kmap1:
+        if self._kmap1:
             dl = self.L/(self.nkick+1)
         else:
             dl = self.L/(self.nkick+1)
@@ -824,14 +825,18 @@ class kmap(drif):
         x[0] += x[1]*dl
         x[2] += x[3]*dl
         for m in range(self.nkick):
-            if self.kmap1:
-                kx = interp2d(self.kmap1['x'],self.kmap1['y'],self.kmap1['kx'],x[0],x[2])
-                ky = interp2d(self.kmap1['x'],self.kmap1['y'],self.kmap1['ky'],x[0],x[2])
+            if self._kmap1:
+                kx = interp2d(self._kmap1['x'],self._kmap1['y'],
+                              self._kmap1['kx'],x[0],x[2])
+                ky = interp2d(self._kmap1['x'],self._kmap1['y'],
+                              self._kmap1['ky'],x[0],x[2])
                 x[1] += kx/BRho/self.nkick
                 x[3] += ky/BRho/self.nkick
-            if self.kmap2:    
-                kx = interp2d(self.kmap2['x'],self.kmap2['y'],self.kmap2['kx'],x[0],x[2])
-                ky = interp2d(self.kmap2['x'],self.kmap2['y'],self.kmap2['ky'],x[0],x[2])
+            if self._kmap2:
+                kx = interp2d(self._kmap2['x'],self._kmap2['y'],
+                              self._kmap2['kx'],x[0],x[2])
+                ky = interp2d(self._kmap2['x'],self._kmap2['y'],
+                              self._kmap2['ky'],x[0],x[2])
                 x[1] += kx/BRho/BRho/self.nkick
                 x[3] += ky/BRho/BRho/self.nkick
             x[0] += x[1]*dl
@@ -859,109 +864,129 @@ class kmap(drif):
 class quad(drif):
     '''
     class: quad - define a quadrupole with given length and K1
-    usage: quad(name='Q1',L=0.5,K1=0.23)
+    usage: QUAD01 = quad(name='QUAD01',L=0.5,K1=0.5)
     '''
-    def __init__(self,name='Q',L=0,K1=0,nkick=4,Dx=0,Dy=0,Dphi=0):
+    def __init__(self,name='QUAD01',L=0.25,K1=1,nkick=4,Dx=0,Dy=0,Dphi=0,tag=[]):
         self.name = str(name)
-        self.L = float(L)
-        self.K1 = float(K1)
-        self.nkick = int(nkick)
-        self.Dx = float(Dx)
-        self.Dy = float(Dy)
-        self.Dphi = float(Dphi)
-        self.update()
+        self._L = float(L)
+        self._K1 = float(K1)
+        self._Dx = float(Dx)
+        self._Dy = float(Dy)
+        self._Dphi = float(Dphi)
+        self._nkick = int(nkick)
+        self.tag = tag
+        self._update()
 
     def __repr__(self):
         return '%s: %s, L = %g, K1 = %15.8f'%(
             self.name,self.__class__.__name__,self.L,self.K1)
 
-    def transmatrix(self):
-        self.tm = np.mat(np.eye(6))
+    @property
+    def K1(self):
+        return self._K1
+
+    @K1.setter
+    def K1(self,value):
+        try:
+            self._K1 = float(value)
+            self._update()
+        except:
+            raise RuntimeError('K1 must be float (or convertible)')
+
+    def _transmatrix(self):
+        self._tm = np.eye(6)
         if self.K1 > 0:
             k = np.sqrt(self.K1)
             p = k*self.L
-            self.tm[0:2,0:2] = np.array([[np.cos(p),np.sin(p)/k],
-                                         [-k*np.sin(p),np.cos(p)]])
-            self.tm[2:4,2:4] = np.array([[np.cosh(p),np.sinh(p)/k],
-                                         [k*np.sinh(p),np.cosh(p)]])
+            self._tm[0:2,0:2] = np.array([[np.cos(p),np.sin(p)/k],
+                                          [-k*np.sin(p),np.cos(p)]])
+            self._tm[2:4,2:4] = np.array([[np.cosh(p),np.sinh(p)/k],
+                                          [k*np.sinh(p),np.cosh(p)]])
         elif self.K1 < 0:
             k = np.sqrt(-self.K1)
             p = k*self.L
-            self.tm[0:2,0:2] = np.array([[np.cosh(p),np.sinh(p)/k],
-                                         [k*np.sinh(p),np.cosh(p)]])
-            self.tm[2:4,2:4] = np.array([[np.cos(p),np.sin(p)/k],
-                                         [-k*np.sin(p),np.cos(p)]])
+            self._tm[0:2,0:2] = np.array([[np.cosh(p),np.sinh(p)/k],
+                                          [k*np.sinh(p),np.cosh(p)]])
+            self._tm[2:4,2:4] = np.array([[np.cos(p),np.sin(p)/k],
+                                          [-k*np.sin(p),np.cos(p)]])
         else:
-            self.tm[0,1] = self.L
-            self.tm[2,3] = self.L
+            super(quad,self)._transmatrix()
         # ---  if there is skew quad, 2-beta is not good
         if self.Dphi != 0.:
             r1 = rotmat(-self.Dphi)
             r0 = rotmat(self.Dphi)
-            self.tm = r1*self.tm*r0
+            self._tm = r1.dot(self.tm).dot(r0)#np.dot(r1,np.dot(self.tm,r0))
 
-    def update(self):
+    def _update(self):
         '''
         update transport (M) and Twiss (Nx,y) matrices with current 
         element parameters, settings for 4th order symplectic pass
         '''
-        super(quad,self).update()
-        self.setSympass()
+        super(quad,self)._update()
+        self._setSympass()
         
-    def setSympass(self):
+    def _setSympass(self):
         '''
         set symplectic pass
         '''
+        if self.K1 == 0:
+            attrlist = ["_dL","_Ma","_Mb","_K1Lg","_K1Ld"]
+            for al in attrlist:
+                if hasattr(self,al): delattr(self, al)
+            return
         a =  0.675603595979828664
         b = -0.175603595979828664
         g =  1.351207191959657328
         d = -1.702414383919314656
-        self.dL = self.L/self.nkick
-        self.Ma = np.mat(np.eye(6))
-        self.Ma[0,1] = a*self.dL
-        self.Ma[2,3] = self.Ma[0,1]
-        self.Mb = np.mat(np.eye(6))
-        self.Mb[0,1] = b*self.dL
-        self.Mb[2,3] = self.Mb[0,1]
-        self.K1Lg = g*self.K1*self.dL
-        self.K1Ld = d*self.K1*self.dL
+        self._dL = self.L/self.nkick
+        self._Ma = np.eye(6)
+        self._Ma[0,1] = a*self._dL
+        self._Ma[2,3] = self._Ma[0,1]
+        self._Mb = np.eye(6)
+        self._Mb[0,1] = b*self._dL
+        self._Mb[2,3] = self._Mb[0,1]
+        self._K1Lg = g*self.K1*self._dL
+        self._K1Ld = d*self.K1*self._dL
 
     def sympass4(self,x0):
         '''
         tracking with 4th order symplectic integrator
         '''
-        x = np.mat(np.array(x0,dtype=float)).reshape(6,-1)
-        if self.Dx != 0:
-            x[0] -= self.Dx
-        if self.Dy != 0:
-            x[2] -= self.Dy
-        if self.Dphi != 0:
-            x = rotmat(self.Dphi)*x
-        S = 0.
-        for i in range(self.nkick):
-            x1p,y1p = x[1],x[3]
-            x =  self.Ma*x
-            x[1] -= self.K1Lg*x[0]/(1.+x[5])
-            x[3] += self.K1Lg*x[2]/(1.+x[5])
-            x =  self.Mb*x
-            x[1] -= self.K1Ld*x[0]/(1.+x[5])
-            x[3] += self.K1Ld*x[2]/(1.+x[5])
-            x =  self.Mb*x
-            x[1] -= self.K1Lg*x[0]/(1.+x[5])
-            x[3] += self.K1Lg*x[2]/(1.+x[5])
-            x =  self.Ma*x
-            x2p,y2p = x[1],x[3]
-            xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
-            # ---  average slope at entrance and exit 
-            S += np.sqrt(1.+np.square(xp)+np.square(yp))*self.dL
-        if self.Dphi != 0:
-            x = rotmat(-self.Dphi)*x
-        if self.Dy != 0:
-            x[2] += self.Dy
-        if self.Dx != 0:
-            x[0] += self.Dx
-        x[4] += S-self.L
-        return x
+        if self.K1 == 0:
+            return super(quad,self).sympass4(x0)
+        else:
+            x = np.array(x0,dtype=float).reshape(6,-1)
+            if self.Dx != 0:
+                x[0] -= self.Dx
+            if self.Dy != 0:
+                x[2] -= self.Dy
+            if self.Dphi != 0:
+                x = rotmat(self.Dphi).dot(x)
+            S = 0.
+            for i in range(self.nkick):
+                x1p,y1p = x[1],x[3]
+                x =  self._Ma.dot(x)
+                x[1] -= self._K1Lg*x[0]/(1.+x[5])
+                x[3] += self._K1Lg*x[2]/(1.+x[5])
+                x =  self._Mb.dot(x)
+                x[1] -= self._K1Ld*x[0]/(1.+x[5])
+                x[3] += self._K1Ld*x[2]/(1.+x[5])
+                x =  self._Mb.dot(x)
+                x[1] -= self._K1Lg*x[0]/(1.+x[5])
+                x[3] += self._K1Lg*x[2]/(1.+x[5])
+                x =  self._Ma.dot(x)
+                x2p,y2p = x[1],x[3]
+                xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
+                # ---  average slope at entrance and exit 
+                S += np.sqrt(1.+np.square(xp)+np.square(yp))*self._dL
+            if self.Dphi != 0:
+                x = rotmat(-self.Dphi).dot(x)
+            if self.Dy != 0:
+                x[2] += self.Dy
+            if self.Dx != 0:
+                x[0] += self.Dx
+            x[4] += S-self.L
+            return x
 
 
 class sole(drif):
@@ -1019,12 +1044,12 @@ class sole(drif):
         g =  1.351207191959657328
         d = -1.702414383919314656
         self.dL = self.L/self.nkick
-        self.Ma = np.mat(np.eye(6))
-        self.Ma[0,1] = a*self.dL
-        self.Ma[2,3] = self.Ma[0,1]
-        self.Mb = np.mat(np.eye(6))
-        self.Mb[0,1] = b*self.dL
-        self.Mb[2,3] = self.Mb[0,1]
+        self._Ma = np.mat(np.eye(6))
+        self._Ma[0,1] = a*self.dL
+        self._Ma[2,3] = self._Ma[0,1]
+        self._Mb = np.mat(np.eye(6))
+        self._Mb[0,1] = b*self.dL
+        self._Mb[2,3] = self._Mb[0,1]
         self.K1Lg = 2*g*self.KS*self.dL
         self.K1Ld = 2*d*self.KS*self.dL
 
@@ -1036,16 +1061,16 @@ class sole(drif):
         S = 0.
         for i in range(self.nkick):
             x1p,y1p = x[1],x[3]
-            x =  self.Ma*x
+            x =  self._Ma*x
             x[1] -= self.K1Lg*x[3]/(1.+x[5])
             x[3] -= self.K1Lg*x[1]/(1.+x[5])
-            x =  self.Mb*x
+            x =  self._Mb*x
             x[1] -= self.K1Ld*x[3]/(1.+x[5])
             x[3] -= self.K1Ld*x[1]/(1.+x[5])
-            x =  self.Mb*x
+            x =  self._Mb*x
             x[1] -= self.K1Lg*x[3]/(1.+x[5])
             x[3] -= self.K1Lg*x[1]/(1.+x[5])
-            x =  self.Ma*x
+            x =  self._Ma*x
             x2p,y2p = x[1],x[3]
             xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
             # ---  average slope at entrance and exit 
@@ -1159,16 +1184,16 @@ class skew(quad):
         S = 0.
         for i in range(self.nkick):
             x1p,y1p = x[1],x[3]
-            x =  self.Ma*x
+            x =  self._Ma*x
             x[1] -= self.K1Lg*x[0]/(1.+x[5])
             x[3] += self.K1Lg*x[2]/(1.+x[5])
-            x =  self.Mb*x
+            x =  self._Mb*x
             x[1] -= self.K1Ld*x[0]/(1.+x[5])
             x[3] += self.K1Ld*x[2]/(1.+x[5])
-            x =  self.Mb*x
+            x =  self._Mb*x
             x[1] -= self.K1Lg*x[0]/(1.+x[5])
             x[3] += self.K1Lg*x[2]/(1.+x[5])
-            x =  self.Ma*x
+            x =  self._Ma*x
             x2p,y2p = x[1],x[3]
             xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
             # ---  average slope at entrance and exit 
@@ -1297,12 +1322,12 @@ class bend(drif):
         g =  1.351207191959657328
         d = -1.702414383919314656
         self.dL = self.L/self.nkick
-        self.Ma = np.mat(np.eye(6))
-        self.Ma[0,1] = a*self.dL
-        self.Ma[2,3] = self.Ma[0,1]
-        self.Mb = np.mat(np.eye(6))
-        self.Mb[0,1] = b*self.dL
-        self.Mb[2,3] = self.Mb[0,1]
+        self._Ma = np.mat(np.eye(6))
+        self._Ma[0,1] = a*self.dL
+        self._Ma[2,3] = self._Ma[0,1]
+        self._Mb = np.mat(np.eye(6))
+        self._Mb[0,1] = b*self.dL
+        self._Mb[2,3] = self._Mb[0,1]
         self.Lg = g*self.dL
         self.Ld = d*self.dL
         self.K1Lg = g*self.K1*self.dL
@@ -1327,19 +1352,19 @@ class bend(drif):
         for i in range(self.nkick):
             x1p,y1p = x[1],x[3]
             x1 = x[0]
-            x =  self.Ma*x
+            x =  self._Ma*x
             x[1] -= -self.K2Lg/2*(np.multiply(x[0],x[0])-np.multiply(x[2],x[2]))+\
                     self.K1Lg*x[0]-self.Lg*x[5]/self.R+self.Lg*x[0]/self.R**2
             x[3] += -self.K2Lg*(np.multiply(x[0],x[2]))+self.K1Lg*x[2]
-            x =  self.Mb*x
+            x =  self._Mb*x
             x[1] -= -self.K2Ld/2*(np.multiply(x[0],x[0])-np.multiply(x[2],x[2]))+\
                     self.K1Ld*x[0]-self.Ld*x[5]/self.R+self.Ld*x[0]/self.R**2
             x[3] += -self.K2Ld*(np.multiply(x[0],x[2]))+self.K1Ld*x[2]
-            x =  self.Mb*x
+            x =  self._Mb*x
             x[1] -= -self.K2Lg/2*(np.multiply(x[0],x[0])-np.multiply(x[2],x[2]))+\
                     self.K1Lg*x[0]-self.Lg*x[5]/self.R+self.Lg*x[0]/self.R**2
             x[3] += -self.K2Lg*(np.multiply(x[0],x[2]))+self.K1Lg*x[2]
-            x =  self.Ma*x
+            x =  self._Ma*x
             x2p,y2p = x[1],x[3]
             x2 = x[0]
             xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
