@@ -1,5 +1,6 @@
 '''
-accelertor lattice in python 
+Lattice code in python
+2016-12-06 
 '''
 
 __version__ = 2.0
@@ -24,7 +25,7 @@ twopi = 2*np.pi
 
 class drif(object):
     '''
-    class: drif - define drift space with given name and length
+    class: drif - define a drift space with given name and length
     usage: D01 = drif(name='D01',L=1.0,Dx=0,Dy=0,Dphi=0)
 
     Parameter list:
@@ -34,7 +35,7 @@ class drif(object):
     tm:           transport matrix 6x6
     tx,ty:        twiss matrics 3x3 for x and y plane
     '''
-    def __init__(self,name='D01',L=0,Dx=0,Dy=0,Dphi=0,nkick=0,tag=[]):
+    def __init__(self,name='D01',L=1.0,Dx=0,Dy=0,Dphi=0,nkick=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._Dx = float(Dx)
@@ -193,7 +194,6 @@ class matx(drif):
         if the given matrix is not symplectic, print warning
         '''
         if abs(np.linalg.det(self.tm)-1.) > 1.e-6:
-            #warnings.warn('linear matrix is not symplectic')
             print('warning: %s\'s linear matrix is not symplectic'%self.name)
         if self.Dphi != 0.:
             r1 = rotmat(-self.Dphi)
