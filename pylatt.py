@@ -1,6 +1,14 @@
 '''
-Lattice code in python
-2016-12-06 
+Lattice code in python 2016-12-06
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT
+SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE
+FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 '''
 
 __version__ = 2.0
@@ -19,14 +27,15 @@ import mvp
 
 np.seterr(all='ignore')
 
-#global parameter: speed of light and twopi
+# --- global parameter: speed of light and twopi
 csp = 299792458.
 twopi = 2*np.pi
+
 
 class drif(object):
     '''
     class: drif - define a drift space with given name and length
-    usage: D01 = drif(name='D01',L=1.0,Dx=0,Dy=0,Dphi=0)
+    usage: D01 = drif(name='D01',L=1.0,nkick=0,Dx=0,Dy=0,Dphi=0,tag=[])
 
     Parameter list:
     name:         element name
@@ -34,8 +43,10 @@ class drif(object):
     Dx, Dy, Dphi: misalignment in meter, radian
     tm:           transport matrix 6x6
     tx,ty:        twiss matrics 3x3 for x and y plane
+    nkick:        number of kicks, reserved for inherited classes
+    tag:          tag list for searching
     '''
-    def __init__(self,name='D01',L=1.0,Dx=0,Dy=0,Dphi=0,nkick=0,tag=[]):
+    def __init__(self,name='D01',L=1.0,nkick=0,Dx=0,Dy=0,Dphi=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._Dx = float(Dx)
@@ -46,7 +57,7 @@ class drif(object):
         self._update()
 
     def __repr__(self):
-        return '%s: %s, L = %g'%(self.name,self.__class__.__name__,self.L)
+        return '%s: %s, L=%g'%(self.name,self.__class__.__name__,self.L)
 
     @property
     def L(self):
@@ -119,8 +130,7 @@ class drif(object):
 
     def _update(self):
         '''
-        check length
-        update transport and Twiss matrices using current parameters
+        update matrices and check magnet length using latest parametes
         '''
         self._chklength()
         self._transmatrix()
@@ -128,7 +138,7 @@ class drif(object):
 
     def _transmatrix(self):
         '''
-        calculate transport matrix
+        calculate linear transport matrix
         '''
         self._tm = np.eye(6)
         self._tm[0,1] = self.L
@@ -136,36 +146,183 @@ class drif(object):
 
     def _twissmatrix(self):
         '''
-        from transport matrix to twiss matrix
+        from transport matrix to calculate two twiss matrices
         '''
         self._tx = trans2twiss(self.tm[0:2,0:2])
         self._ty = trans2twiss(self.tm[2:4,2:4])
 
     def _chklength(self):
         '''
-        check element length, raise a warnning if negative length
+        check element length, print a warnning if negative length
         '''
         if self.L < 0.:
-            #warnings.warn('%s has a negative length, L = %f'%(self.name,self.L))
-            print('warning: %s has a negative length, L = %f'%(self.name,self.L))
+            print('warning: %s has a negative length, L = %g'%(self.name,self.L))
 
     def sympass4(self,x0):
         '''
-        implement 4-th order symplectic pass
+        implement 4-th order symplectic pass with initial condition
         x0: the initial coordinates in phase space for m particles 
-            with a array format 6xm
         '''
-        x = np.array(x0,dtype=float).reshape(6,-1)
+        try:
+            x = np.array(x0,dtype=float).reshape(6,-1)
+        except:
+            print('initial condition format must be 6xn or convertible')
         if self.L != 0:
-            x = np.dot(self.tm,x)
+            x = self.tm.dot(x)
             x[4] += (np.sqrt(1.+np.square(x[1])+np.square(x[3]))-1.)*self.L
         return x
+
+class quad(drif):
+    '''
+    class: quad - define a quadrupole with given length and K1
+    usage: Q01 = quad(name='Q01',L=0.5,K1=0.5)
+
+    Parameter list:
+    name:         element name
+    L:            length
+    K1:           normalized K1 as the MAD convention
+    Dx, Dy, Dphi: misalignment in meter, radian
+    tm:           transport matrix 6x6
+    tx,ty:        twiss matrics 3x3 for x and y plane
+    nkick:        number of kicks
+    tag:          tag list for searching
+    '''
+    def __init__(self,name='Q01',L=0.25,K1=1,nkick=4,Dx=0,Dy=0,Dphi=0,tag=[]):
+        self.name = str(name)
+        self._L = float(L)
+        self._K1 = float(K1)
+        self._nkick = int(nkick)
+        self._Dx = float(Dx)
+        self._Dy = float(Dy)
+        self._Dphi = float(Dphi)
+        self.tag = tag
+        self._update()
+
+    def __repr__(self):
+        return '%s: %s, L=%g, K1=%g'%(
+            self.name,self.__class__.__name__,self.L,self.K1)
+
+    @property
+    def K1(self):
+        return self._K1
+
+    @K1.setter
+    def K1(self,value):
+        try:
+            self._K1 = float(value)
+            self._update()
+        except:
+            raise RuntimeError('K1 must be float (or convertible)')
+
+    def _transmatrix(self):
+        self._tm = np.eye(6)
+        if self.K1 > 0:
+            k = np.sqrt(self.K1)
+            p = k*self.L
+            self._tm[0:2,0:2] = np.array([[np.cos(p),np.sin(p)/k],
+                                          [-k*np.sin(p),np.cos(p)]])
+            self._tm[2:4,2:4] = np.array([[np.cosh(p),np.sinh(p)/k],
+                                          [k*np.sinh(p),np.cosh(p)]])
+        elif self.K1 < 0:
+            k = np.sqrt(-self.K1)
+            p = k*self.L
+            self._tm[0:2,0:2] = np.array([[np.cosh(p),np.sinh(p)/k],
+                                          [k*np.sinh(p),np.cosh(p)]])
+            self._tm[2:4,2:4] = np.array([[np.cos(p),np.sin(p)/k],
+                                          [-k*np.sin(p),np.cos(p)]])
+        else:
+            super(quad,self)._transmatrix()
+
+        if self.Dphi != 0.:
+            r1 = rotmat(-self.Dphi)
+            r0 = rotmat(self.Dphi)
+            self._tm = r1.dot(self.tm).dot(r0)
+
+    def _update(self):
+        '''
+        update transport (tm) and Twiss (tx,ty) matrices with current
+        element parameters, settings for 4th order symplectic pass
+        '''
+        super(quad,self)._update()
+        self._setSympass()
+
+    def _setSympass(self):
+        '''
+        set symplectic pass
+        '''
+        if self.K1==0 or self.L==0:
+            attrlist = ["_dL","_Ma","_Mb","_K1Lg","_K1Ld"]
+            for al in attrlist:
+                if hasattr(self,al): delattr(self, al)
+            return
+        a =  0.675603595979828664
+        b = -0.175603595979828664
+        g =  1.351207191959657328
+        d = -1.702414383919314656
+        self._dL = self.L/self.nkick
+        self._Ma = np.eye(6)
+        self._Ma[0,1] = a*self._dL
+        self._Ma[2,3] = self._Ma[0,1]
+        self._Mb = np.eye(6)
+        self._Mb[0,1] = b*self._dL
+        self._Mb[2,3] = self._Mb[0,1]
+        self._K1Lg = g*self.K1*self._dL
+        self._K1Ld = d*self.K1*self._dL
+
+    def sympass4(self,x0):
+        '''
+        implement 4th order symplectic tracking with given initial conditions
+        '''
+        if self.K1==0 or self.L==0:
+            return super(quad,self).sympass4(x0)
+        else:
+            x = np.array(x0,dtype=float).reshape(6,-1)
+            if self.Dx != 0:
+                x[0] -= self.Dx
+            if self.Dy != 0:
+                x[2] -= self.Dy
+            if self.Dphi != 0:
+                x = rotmat(self.Dphi).dot(x)
+            S = 0.
+            for i in range(self.nkick):
+                x1p,y1p = x[1],x[3]
+                x =  self._Ma.dot(x)
+                x[1] -= self._K1Lg*x[0]/(1.+x[5])
+                x[3] += self._K1Lg*x[2]/(1.+x[5])
+                x =  self._Mb.dot(x)
+                x[1] -= self._K1Ld*x[0]/(1.+x[5])
+                x[3] += self._K1Ld*x[2]/(1.+x[5])
+                x =  self._Mb.dot(x)
+                x[1] -= self._K1Lg*x[0]/(1.+x[5])
+                x[3] += self._K1Lg*x[2]/(1.+x[5])
+                x =  self._Ma.dot(x)
+                x2p,y2p = x[1],x[3]
+                xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
+                # --- average slope at entrance and exit
+                S += np.sqrt(1.+np.square(xp)+np.square(yp))*self._dL
+            if self.Dphi != 0:
+                x = rotmat(-self.Dphi).dot(x)
+            if self.Dy != 0:
+                x[2] += self.Dy
+            if self.Dx != 0:
+                x[0] += self.Dx
+            x[4] += S-self.L
+            return x
 
 
 class matx(drif):
     '''
-    matrix element
-    usage: matx(name='MAT01',L=0,Dx=0,Dy=0,Dphi=0)
+    class matx: define a linear element with its given 6x6 matrix
+    usage: M01 = matx(name='M01',tm=np.eye(6),Dx=0,Dy=0,Dphi=0,tag=[])
+
+    Parameter list:
+    name:         element name
+    L:            length
+    K1:           normalized K1 as the MAD convention
+    Dx, Dy, Dphi: misalignment in meter, radian
+    tm:           transport matrix 6x6
+    tx,ty:        twiss matrics 3x3 for x and y plane
+    tag:          tag list for searching
     '''
     def __init__(self,name='MAT01',L=0,tm=np.eye(6),Dx=0,Dy=0,Dphi=0,tag=[]):
         self.name = str(name)
@@ -205,7 +362,10 @@ class matx(drif):
         path-length calculation is using the average of slopes at both
         entrance and exit, which might not be so accurate
         '''
+        #try:
         x = np.array(x0,dtype=float).reshape(6,-1)
+        #except:
+        #    print('initial condition format must be 6xn or convertible')
         x1p,y1p = x[1],x[3]
         x = np.dot(self.tm,x)
         x2p,y2p = x[1],x[3]
@@ -216,10 +376,18 @@ class matx(drif):
 
 class moni(drif):
     '''
-    monitor (BPM) with a default length 0
-    usage: BPM01 = moni(name='BPM01',L=0)
+    class moni: define monitor (BPM) with a default length 0
+    usage: BPM01 = moni(name='BPM01',L=0,Dx=0,Dy=0,Dphi=0,tag=[])
+
+    Parameter list:
+    name:         element name
+    L:            length
+    Dx, Dy, Dphi: misalignment in meter, radian
+    tm:           transport matrix 6x6
+    tx,ty:        twiss matrics 3x3 for x and y plane
+    tag:          tag list for searching
     '''
-    def __init__(self,name='BPM01',L=0,Dx=0,Dy=0,Dphi=0):
+    def __init__(self,name='BPM01',L=0,Dx=0,Dy=0,Dphi=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._Dx = float(Dx)
@@ -230,13 +398,22 @@ class moni(drif):
 
 class rfca(drif):
     '''
-    RF cavity with a default length 0
-    voltage: RF voltage in V
-    freq: RF frequency in Hz
-    usage: rfc = rfca(name='RFC01',voltage=2e6,freq=0.5e9,L=0)
+    class rfca: define RF cavity with given parameters
+    usage: RFC01 = rfca(name='RFC01',voltage=2e6,freq=0.5e9,L=0)
+
+    Parameter list:
+    name:         element name
+    L:            length
+    Dx, Dy, Dphi: misalignment in meter, radian
+    tm:           transport matrix 6x6
+    tx,ty:        twiss matrics 3x3 for x and y plane
+    tag:          tag list for searching
+    voltage:      RF cavity voltage in V
+    freq:         RF cavity frequency in Hz
+    phase:        RF acclerator phase in degree
     '''
     def __init__(self,name='RFC01',L=0,voltage=2e6,
-                 freq=0.5e9,phase=0,Dx=0,Dy=0,Dphi=0):
+                 freq=0.5e9,phase=0,Dx=0,Dy=0,Dphi=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._Dx = float(Dx)
@@ -245,6 +422,7 @@ class rfca(drif):
         self._voltage = float(voltage)
         self._freq = float(freq)
         self._phase = float(phase)
+        self.tag = []
         self._update()
 
     @property
@@ -286,10 +464,20 @@ class rfca(drif):
 
 class kick(drif):
     '''
-    kick with a default length 0
-    usage: kick(name='kick',L=0,hkick=0,vkick=0)
+    class kick: define a kick
+    usage: K01 = kick(name='K01',L=0,hkick=0,vkick=0,nkick=1,Dx=0,Dy=0,Dphi=0,tag=[])
+
+    Parameter list:
+    name:         element name
+    L:            length
+    hkick:        horizontal kick, radian
+    vkick:        vertical kick, radian
+    Dx, Dy, Dphi: misalignment in meter, radian
+    tm:           transport matrix 6x6
+    tx,ty:        twiss matrics 3x3 for x and y plane
+    tag:          tag list for searching
     '''
-    def __init__(self,name='KICK',L=0,hkick=0,vkick=0,nkick=1,Dx=0,Dy=0,Dphi=0):
+    def __init__(self,name='K01',L=0,hkick=0,vkick=0,nkick=1,Dx=0,Dy=0,Dphi=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._hkick = float(hkick)
@@ -298,6 +486,7 @@ class kick(drif):
         self._Dx = float(Dx)
         self._Dy = float(Dy)
         self._Dphi = float(Dphi)
+        self.tag = tag
         self._update()
 
     def __repr__(self):
@@ -339,6 +528,11 @@ class kick(drif):
         '''
         set symplectic pass
         '''
+        if self.hkick==0 and self.vkick==0:
+            attrlist = ["_dL","_Ma","_Mb","_KhLg","_KhLd","_KvLg","_KvLd"]
+            for al in attrlist:
+                if hasattr(self,al): delattr(self, al)
+            return
         a =  0.675603595979828664
         b = -0.175603595979828664
         g =  1.351207191959657328
@@ -356,10 +550,10 @@ class kick(drif):
         self._KvLd = d*self.vkick/self.nkick
 
     def sympass4(self,x0):
-        '''
-        implement 4-th order symplectic pass (actually 2-nd here)
-        '''
         x = np.array(x0,dtype=float).reshape(6,-1)
+
+        if self.hkick==0 and self.vkick==0:
+            return super(moni,self).sympass4(x)
 
         if self.Dphi != 0:
             x = np.dot(rotmat(self.Dphi),x)
@@ -368,16 +562,16 @@ class kick(drif):
             S = 0
             for i in xrange(self.nkick):
                 x1p,y1p = x[1],x[3]
-                x =  np.dot(self._Ma,x)
+                x =  self._Ma.dot(x)
                 x[1] += self._KhLg/(1.+x[5])
                 x[3] += self._KvLg/(1.+x[5])
-                x =  np.dot(self._Mb,x)
+                x =  self._Mb.dot(x)
                 x[1] += self._KhLd/(1.+x[5])
                 x[3] += self._KvLd/(1.+x[5])
-                x =  np.dot(self._Mb,x)
+                x =  self._Mb.dot(x)
                 x[1] += self._KhLg/(1.+x[5])
                 x[3] += self._KvLg/(1.+x[5])
-                x =  np.dot(self._Ma,x)
+                x =  self._Ma.dot(x)
                 x2p,y2p = x[1],x[3]
                 xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
                 S += np.sqrt(1.+np.square(xp)+np.square(yp))*self._dL
@@ -395,19 +589,29 @@ class kick(drif):
 class aper(drif):
     '''
     class: aper - define a physical aperture with two dimension constraints
-    usage: APER01 = aper(name='APER01',L=0,aper=[-0.02,0.02,-0.01,0.01])
+    usage: AP01 = aper(name='AP01',L=0,aper=[-0.1,0.1,-0.1,0.1],Dx=0,Dy=0,Dphi=0,tag=[])
     
+    Parameter list:
+    name:         element name
+    L:            length
+    aper:         rectangle aperture dimensions
+    Dx, Dy, Dphi: misalignment in meter, radian
+    tm:           transport matrix 6x6
+    tx,ty:        twiss matrics 3x3 for x and y plane
+    tag:          tag list for searching
+
     aperture is specfied by 4 parameters in sequence:
     [x_min,x_max,y_min,y_max]
     correctness of aperture configuration will be self-checked
     '''
-    def __init__(self,name='APER',L=0,aper=[-1.,1.,-1.,1.],Dx=0,Dy=0,Dphi=0):
+    def __init__(self,name='APER',L=0,aper=[-1.,1.,-1.,1.],Dx=0,Dy=0,Dphi=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._aper = np.array(aper,float)
         self._Dx = float(Dx)
         self._Dy = float(Dy)
         self._Dphi = float(Dphi)
+        self.tag = tag
         self._update()
 
     @property
@@ -428,13 +632,12 @@ class aper(drif):
 
     def _selfcheck(self):
         '''
-        check aperture dimension, if OK, return True, otherwise reture False
-        aperture must have 4 parameters in a format: [x_min,x_max,y_min,y_max] 
+        check aperture dimension, if OK, no return, otherwise print warning 
         '''
         if len(self.aper) != 4:
             print('warning: %s\'s aperture dimension is not 4'%self.name)
         if self.aper[0]>=self.aper[1] or self.aper[2]>=self.aper[3]:
-            print('warning: %s\'s aperture format should be [x_min,x_max,y_min,y_max]'%self.name)
+            print('warning: %s\'s aperture format [x_min,x_max,y_min,y_max]'%self.name)
 
     '''
     def sympass4(self,x0):
@@ -451,9 +654,19 @@ class aper(drif):
 class octu(drif):
     '''
     class: octu - define octupole with K3
-    usage: OCT01 = octu(name='OCT01',L=0.1)
+    usage: OCT01 = octu(name='OCT01',L=0.1,K3=10,nkick=4,Dx=0,Dy=0,Dphi=0,tag=[])
+
+    Parameter list:
+    name:         element name
+    L:            length
+    K3:           octupole K3 - MAD convention
+    Dx, Dy, Dphi: misalignment in meter, radian
+    tm:           transport matrix 6x6
+    tx,ty:        twiss matrics 3x3 for x and y plane
+    nkick:        number of kicks, reserved for inherited classes
+    tag:          tag list for searching
     '''
-    def __init__(self,name='OCT01',L=0,K3=0,nkick=4,Dx=0,Dy=0,Dphi=0):
+    def __init__(self,name='OCT01',L=0,K3=0,nkick=4,Dx=0,Dy=0,Dphi=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._K3 = float(K3)
@@ -461,7 +674,8 @@ class octu(drif):
         self._Dx = float(Dx)
         self._Dy = float(Dy)
         self._Dphi = float(Dphi)
-        self.update()
+        self.tag = tag
+        self._update()
    
     def __repr__(self):
         return '%s: %s, L = %g, K3 = %15.8f'%(
@@ -491,27 +705,34 @@ class octu(drif):
         '''
         set symplectic pass
         '''
-        if self.L != 0:
-            a =  0.675603595979828664
-            b = -0.175603595979828664
-            g =  1.351207191959657328
-            d = -1.702414383919314656
-            self._dL = self.L/self.nkick
-            self._Ma = np.eye(6)
-            self._Ma[0,1] = a*self._dL
-            self._Ma[2,3] = self._Ma[0,1]
-            self._Mb = np.eye(6)
-            self._Mb[0,1] = b*self._dL
-            self._Mb[2,3] = self._Mb[0,1]
-            self._K3Lg = g*self.K3*self._dL
-            self._K3Ld = d*self.K3*self._dL
+        if self.K3==0 or self.L==0:
+            attrlist = ["_dL","_Ma","_Mb","_K3Lg","_K3Ld"]
+            for al in attrlist:
+                if hasattr(self,al): delattr(self, al)
+            return
+
+        a =  0.675603595979828664
+        b = -0.175603595979828664
+        g =  1.351207191959657328
+        d = -1.702414383919314656
+        self._dL = self.L/self.nkick
+        self._Ma = np.eye(6)
+        self._Ma[0,1] = a*self._dL
+        self._Ma[2,3] = self._Ma[0,1]
+        self._Mb = np.eye(6)
+        self._Mb[0,1] = b*self._dL
+        self._Mb[2,3] = self._Mb[0,1]
+        self._K3Lg = g*self.K3*self._dL
+        self._K3Ld = d*self.K3*self._dL
 
     def sympass4(self,x0):
         '''
         implement tracking with 4th order symplectic integrator
         '''
-        x = np.array(x0,dtype=float).reshape(6,-1)
-        if self.L != 0 and self.K3 != 0:
+        if self.K3==0 or self.L==0:
+            return super(octu,self).sympass4(x0)
+        else:
+            x = np.array(x0,dtype=float).reshape(6,-1)
             if self.Dx != 0:
                 x[0] -= self.Dx
             if self.Dy != 0:
@@ -548,8 +769,6 @@ class octu(drif):
                 x[0] += self.Dx
             x[4] += S-self.L
             return x    
-        else:
-            return super(octu,self).sympass4(x)
         #else:
         #    x[1] -= self.K3/6*(np.multiply(np.multiply(x[0],x[0]),x[0]) - \
         #                         3*np.multiply(x[0],np.multiply(x[2],x[2])))/(1.+x[5])
@@ -563,9 +782,17 @@ class sext(drif):
     class: sext - define setupole with length and K2
     usage: SEXT01 = sext(name='SEXT01',L=0.25,K2=1.0)
     
-    K2 = 1/(B*Rho)*d(dB/dx)/dx - MAD definition
+    Parameter list:
+    name:         element name
+    L:            length
+    K2:           octupole K2 - MAD convention
+    Dx, Dy, Dphi: misalignment in meter, radian
+    tm:           transport matrix 6x6
+    tx,ty:        twiss matrics 3x3 for x and y plane
+    nkick:        number of kicks, reserved for inherited classes
+    tag:          tag list for searching
     '''
-    def __init__(self,name='SEXT01',L=0,K2=0,nkick=4,Dx=0,Dy=0,Dphi=0):
+    def __init__(self,name='SEXT01',L=0,K2=0,nkick=4,Dx=0,Dy=0,Dphi=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._K2 = float(K2)
@@ -573,6 +800,7 @@ class sext(drif):
         self._Dx = float(Dx)
         self._Dy = float(Dy)
         self._Dphi = float(Dphi)
+        self.tag = []
         self._update()
    
     def __repr__(self):
@@ -603,6 +831,12 @@ class sext(drif):
         '''
         set symplectic pass
         '''
+        if self.K2==0 or self.L==0:
+            attrlist = ["_dL","_Ma","_Mb","_K2Lg","_K2Ld"]
+            for al in attrlist:
+                if hasattr(self,al): delattr(self, al)
+            return
+
         a =  0.675603595979828664
         b = -0.175603595979828664
         g =  1.351207191959657328
@@ -621,8 +855,11 @@ class sext(drif):
         '''
         implement tracking with 4th order symplectic integrator
         '''
-        x = np.array(x0,dtype=float).reshape(6,-1)
-        if self.K2 != 0.:
+        if self.K2==0 or self.L==0:
+            return super(sext,self).sympass4(x0)
+        else:
+            x = np.array(x0,dtype=float).reshape(6,-1)
+
             if self.Dx != 0:
                 x[0] -= self.Dx
             if self.Dy != 0:
@@ -656,8 +893,6 @@ class sext(drif):
                 x[0] += self.Dx
             x[4] += S-self.L
             return x
-        else:
-            return super(sext,self).sympass4(x)
 
 
 class kmap(drif):
@@ -859,134 +1094,6 @@ class kmap(drif):
             x = self.sympass4(x0)
             tm[:,m] = x/dx
         return tm
-
-
-class quad(drif):
-    '''
-    class: quad - define a quadrupole with given length and K1
-    usage: QUAD01 = quad(name='QUAD01',L=0.5,K1=0.5)
-    '''
-    def __init__(self,name='QUAD01',L=0.25,K1=1,nkick=4,Dx=0,Dy=0,Dphi=0,tag=[]):
-        self.name = str(name)
-        self._L = float(L)
-        self._K1 = float(K1)
-        self._Dx = float(Dx)
-        self._Dy = float(Dy)
-        self._Dphi = float(Dphi)
-        self._nkick = int(nkick)
-        self.tag = tag
-        self._update()
-
-    def __repr__(self):
-        return '%s: %s, L = %g, K1 = %15.8f'%(
-            self.name,self.__class__.__name__,self.L,self.K1)
-
-    @property
-    def K1(self):
-        return self._K1
-
-    @K1.setter
-    def K1(self,value):
-        try:
-            self._K1 = float(value)
-            self._update()
-        except:
-            raise RuntimeError('K1 must be float (or convertible)')
-
-    def _transmatrix(self):
-        self._tm = np.eye(6)
-        if self.K1 > 0:
-            k = np.sqrt(self.K1)
-            p = k*self.L
-            self._tm[0:2,0:2] = np.array([[np.cos(p),np.sin(p)/k],
-                                          [-k*np.sin(p),np.cos(p)]])
-            self._tm[2:4,2:4] = np.array([[np.cosh(p),np.sinh(p)/k],
-                                          [k*np.sinh(p),np.cosh(p)]])
-        elif self.K1 < 0:
-            k = np.sqrt(-self.K1)
-            p = k*self.L
-            self._tm[0:2,0:2] = np.array([[np.cosh(p),np.sinh(p)/k],
-                                          [k*np.sinh(p),np.cosh(p)]])
-            self._tm[2:4,2:4] = np.array([[np.cos(p),np.sin(p)/k],
-                                          [-k*np.sin(p),np.cos(p)]])
-        else:
-            super(quad,self)._transmatrix()
-        # ---  if there is skew quad, 2-beta is not good
-        if self.Dphi != 0.:
-            r1 = rotmat(-self.Dphi)
-            r0 = rotmat(self.Dphi)
-            self._tm = r1.dot(self.tm).dot(r0)#np.dot(r1,np.dot(self.tm,r0))
-
-    def _update(self):
-        '''
-        update transport (M) and Twiss (Nx,y) matrices with current 
-        element parameters, settings for 4th order symplectic pass
-        '''
-        super(quad,self)._update()
-        self._setSympass()
-        
-    def _setSympass(self):
-        '''
-        set symplectic pass
-        '''
-        if self.K1 == 0:
-            attrlist = ["_dL","_Ma","_Mb","_K1Lg","_K1Ld"]
-            for al in attrlist:
-                if hasattr(self,al): delattr(self, al)
-            return
-        a =  0.675603595979828664
-        b = -0.175603595979828664
-        g =  1.351207191959657328
-        d = -1.702414383919314656
-        self._dL = self.L/self.nkick
-        self._Ma = np.eye(6)
-        self._Ma[0,1] = a*self._dL
-        self._Ma[2,3] = self._Ma[0,1]
-        self._Mb = np.eye(6)
-        self._Mb[0,1] = b*self._dL
-        self._Mb[2,3] = self._Mb[0,1]
-        self._K1Lg = g*self.K1*self._dL
-        self._K1Ld = d*self.K1*self._dL
-
-    def sympass4(self,x0):
-        '''
-        tracking with 4th order symplectic integrator
-        '''
-        if self.K1 == 0:
-            return super(quad,self).sympass4(x0)
-        else:
-            x = np.array(x0,dtype=float).reshape(6,-1)
-            if self.Dx != 0:
-                x[0] -= self.Dx
-            if self.Dy != 0:
-                x[2] -= self.Dy
-            if self.Dphi != 0:
-                x = rotmat(self.Dphi).dot(x)
-            S = 0.
-            for i in range(self.nkick):
-                x1p,y1p = x[1],x[3]
-                x =  self._Ma.dot(x)
-                x[1] -= self._K1Lg*x[0]/(1.+x[5])
-                x[3] += self._K1Lg*x[2]/(1.+x[5])
-                x =  self._Mb.dot(x)
-                x[1] -= self._K1Ld*x[0]/(1.+x[5])
-                x[3] += self._K1Ld*x[2]/(1.+x[5])
-                x =  self._Mb.dot(x)
-                x[1] -= self._K1Lg*x[0]/(1.+x[5])
-                x[3] += self._K1Lg*x[2]/(1.+x[5])
-                x =  self._Ma.dot(x)
-                x2p,y2p = x[1],x[3]
-                xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
-                # ---  average slope at entrance and exit 
-                S += np.sqrt(1.+np.square(xp)+np.square(yp))*self._dL
-            if self.Dphi != 0:
-                x = rotmat(-self.Dphi).dot(x)
-            if self.Dy != 0:
-                x[2] += self.Dy
-            if self.Dx != 0:
-                x[0] += self.Dx
-            x[4] += S-self.L
-            return x
 
 
 class sole(drif):
