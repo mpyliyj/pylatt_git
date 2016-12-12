@@ -1096,6 +1096,332 @@ class kmap(drif):
         return tm
 
 
+class bend(drif):
+    '''
+    class: bend - define a bend (dipole) with given parmeters
+    usage: B01 = bend(name='B01',L=1,angle=0.2,e1=0.1,e2=0.1,K1=0,
+                      K2=0,nkick=10,hgap=0,fint=0,Dx=0,Dy=0,Dphi=0,tag=[])
+    
+    notice: it can have quadrupole and sextupole gradients integrated
+    '''
+    def __init__(self,name='B',L=1,angle=1e-9,\
+                 e1=0,e2=0,K1=0,K2=0,nkick=10,\
+                 hgap=0,fint=0,Dx=0,Dy=0,Dphi=0,tag=[]):
+        self.name = str(name)
+        self._L = float(L)
+        self._angle = float(angle)
+        self._e1 = float(e1)
+        self._e2 = float(e2)
+        self._K1 = float(K1)
+        self._K2 = float(K2)
+        self._nkick = int(nkick)
+#        self._R = self.L/self.angle
+        self._Dx = float(Dx)
+        self._Dy = float(Dy)
+        self._Dphi = float(Dphi)
+        self._hgap = float(hgap)
+        self._fint = float(fint)
+        self.tag = []
+        self._update()
+
+    def __repr__(self):
+        return '%s: %s, L = %g, angle = %15.8f, e1 = %15.8f, e2 = %15.8f'%(
+            self.name,self.__class__.__name__,self.L,self.angle,self.e1,self.e2)
+
+    @property
+    def angle(self):
+        return self._angle
+
+    @angle.setter
+    def angle(self,value):
+        try:
+            self._angle = float(value)
+            self._update()
+        except:
+            raise RuntimeError('angle must be float (or convertible)')
+
+    @property
+    def e1(self):
+        return self._e1
+
+    @e1.setter
+    def e1(self,value):
+        try:
+            self._e1 = float(value)
+            self._update()
+        except:
+            raise RuntimeError('e1 must be float (or convertible)')
+
+    @property
+    def e2(self):
+        return self._e2
+
+    @e2.setter
+    def e2(self,value):
+        try:
+            self._e2 = float(value)
+            self._update()
+        except:
+            raise RuntimeError('e2 must be float (or convertible)')
+
+    @property
+    def K1(self):
+        return self._K1
+
+    @K1.setter
+    def K1(self,value):
+        try:
+            self._K1 = float(value)
+            self._update()
+        except:
+            raise RuntimeError('K1 must be float (or convertible)')
+
+    @property
+    def K2(self):
+        return self._K2
+
+    @K2.setter
+    def K2(self,value):
+        try:
+            self._K2 = float(value)
+            self._update()
+        except:
+            raise RuntimeError('K2 must be float (or convertible)')
+
+    @property
+    def hgap(self):
+        return self._hgap
+
+    @hgap.setter
+    def hgap(self,value):
+        try:
+            self._hgap = float(value)
+            self._update()
+        except:
+            raise RuntimeError('hgap must be float (or convertible)')
+
+    @property
+    def fint(self):
+        return self._fint
+
+    @fint.setter
+    def fint(self,value):
+        try:
+            self._fint = float(value)
+            self._update()
+        except:
+            raise RuntimeError('fint must be float (or convertible)')
+
+    def _transmatrix(self):
+        kx = self.K1+1/(self._R*self._R)
+        self._tm = np.eye(6)
+        if kx > 0:
+            k = np.sqrt(kx)
+            p = k*self.L
+            self._tm[0:2,0:2] = np.array([[np.cos(p),np.sin(p)/k],
+                                          [-k*np.sin(p),np.cos(p)]])
+            self._tm[0:2,5:6] = np.array([[(1-np.cos(p))/(self._R*kx)],
+                                          [np.sin(p)/(self._R*k)]])
+            self._tm[4,0] = self.tm[1,5]
+            self._tm[4,1] = self.tm[0,5]
+            self._tm[4,5] = (k*self.L-np.sin(p))/self._R/self._R/k/kx
+        elif kx < 0:
+            k = np.sqrt(-kx)
+            p = k*self.L
+            self._tm[0:2,0:2] = np.array([[np.cosh(p),np.sinh(p)/k],
+                                          [k*np.sinh(p),np.cosh(p)]])
+            self._tm[0:2,5:6] = np.array([[(np.cosh(p)-1)/(-self._R*kx)],
+                                          [np.sinh(p)/(self._R*k)]])
+            self._tm[4,0] = self.tm[1,5]
+            self._tm[4,1] = self.tm[0,5]
+            self._tm[4,5] = (k*self.L-np.sinh(p))/self._R/self._R/k/kx
+        else:
+            self._tm[0,1] = self.L
+        if self.K1 > 0:
+            k = np.sqrt(self.K1)
+            p = k*self.L
+            self._tm[2:4,2:4] = np.array([[np.cosh(p),np.sinh(p)/k],
+                                          [k*np.sinh(p),np.cosh(p)]])
+        elif self.K1 < 0:
+            k = np.sqrt(-self.K1)
+            p = k*self.L
+            self._tm[2:4,2:4] = np.array([[np.cos(p),np.sin(p)/k],
+                                          [-k*np.sin(p),np.cos(p)]])
+        else:
+           self._tm[2,3] = self.L
+        #entrance
+        if self.hgap!=0 and self.fint!=0:
+            vf  = -1/self._R*self.hgap*self.fint*(1+np.sin(self.e1)**2)/np.cos(self.e1)*2
+        else:
+            vf = 0
+        if self.e1!=0 or vf!=0:
+            m1 = np.eye(6)
+            m1[1,0] = np.tan(self.e1)/self._R
+            m1[3,2] = -np.tan(self.e1+vf)/self._R
+            self._m1 = m1
+            self._tm = self.tm.dot(m1)
+        #exit
+        if self.hgap!=0 and self.fint!=0:
+            vf = -1/self._R*self.hgap*self.fint*(1+np.sin(self.e2)**2)/np.cos(self.e2)*2
+        else:
+            vf = 0
+        if self.e1!=0 or vf!=0:
+            m2 = np.eye(6)
+            m2[1,0] = np.tan(self.e2)/self._R
+            m2[3,2] = -np.tan(self.e2+vf)/self._R
+            self._m2 = m2
+            self._tm = m2.dot(self.tm)
+        if self.Dphi != 0.:
+            r1 = rotmat(-self.Dphi)
+            r0 = rotmat(self.Dphi)
+            self._tm = r1.dot(self.tm).dot(r0)
+
+    def _update(self):
+        '''
+        update transport (M) and Twiss (Nx,y) matrices with current 
+        element parameters, settings for 4th order symplectic pass
+        '''
+        try:
+            self._R = self.L/self.angle
+        except:
+            raise RuntimeError("%s: bending angle is zero"%self.name)
+        super(bend,self)._update()
+        self._setSympass()
+
+    def _setSympass(self):
+        '''
+        set symplectic pass
+        '''
+        a =  0.675603595979828664
+        b = -0.175603595979828664
+        g =  1.351207191959657328
+        d = -1.702414383919314656
+        self._dL = self.L/self.nkick
+        self._Ma = np.eye(6)
+        self._Ma[0,1] = a*self._dL
+        self._Ma[2,3] = self._Ma[0,1]
+        self._Mb = np.eye(6)
+        self._Mb[0,1] = b*self._dL
+        self._Mb[2,3] = self._Mb[0,1]
+        self._Lg = g*self._dL
+        self._Ld = d*self._dL
+        self._K1Lg = g*self.K1*self._dL
+        self._K1Ld = d*self.K1*self._dL
+        self._K2Lg = g*self.K2*self._dL
+        self._K2Ld = d*self.K2*self._dL
+
+    def sympass4(self,x0):
+        '''
+        implement tracking with 4yh order symplectic integrator
+        '''
+        x = np.array(x0,dtype=float).reshape(6,-1)
+        S = 0.
+        if self.Dx != 0:
+            x[0] -= self.Dx
+        if self.Dy != 0:
+            x[2] -= self.Dy
+        if self.Dphi != 0:
+            x = rotmat(self.Dphi)*x
+        if hasattr(self,'_m1'):
+            x = self._m1.dot(x)
+        for i in range(self.nkick):
+            x1p,y1p = x[1],x[3]
+            x1 = x[0]
+            x =  self._Ma.dot(x)
+            x[1] -= self._K2Lg/2*(np.multiply(x[0],x[0])-np.multiply(x[2],x[2]))/(1+x[5]) \
+                   +self._K1Lg*x[0]/(1+x[5])-self._Lg*x[5]/self._R+self._Lg*x[0]/self._R**2
+            x[3] += self._K2Lg*(np.multiply(x[0],x[2]))/(1+x[5])+self._K1Lg*x[2]/(1+x[5])
+            x =  self._Mb.dot(x)
+            x[1] -= self._K2Ld/2*(np.multiply(x[0],x[0])-np.multiply(x[2],x[2]))/(1+x[5]) \
+                   +self._K1Ld*x[0]/(1+x[5])-self._Ld*x[5]/self._R+self._Ld*x[0]/self._R**2
+            x[3] += self._K2Ld*(np.multiply(x[0],x[2]))/(1+x[5])+self._K1Ld*x[2]/(1+x[5])
+            x =  self._Mb.dot(x)
+            x[1] -= self._K2Lg/2*(np.multiply(x[0],x[0])-np.multiply(x[2],x[2]))/(1+x[5]) \
+                   +self._K1Lg*x[0]/(1+x[5])-self._Lg*x[5]/self._R+self._Lg*x[0]/self._R**2
+            x[3] += self._K2Lg*(np.multiply(x[0],x[2]))/(1+x[5])+self._K1Lg*x[2]/(1+x[5])
+            x =  self._Ma.dot(x)
+            x2p,y2p = x[1],x[3]
+            x2 = x[0]
+            xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
+            xav = (x1+x2)/2
+            S += np.multiply(np.sqrt(1.+np.square(xp)+np.square(yp)),
+                             (1+xav/self._R))*self._dL
+        if hasattr(self,'_m2'):
+            x = self._m2.dot(x)
+        if self.Dphi != 0:
+            x = rotmat(-self.Dphi).dot(x)
+        if self.Dy != 0:
+            x[2] += self.Dy
+        if self.Dx != 0:
+            x[0] += self.Dx
+        x[4] += S-self.L
+        return x
+
+
+class mult(drif):
+    '''
+    class: mult - define a thin-lens multipole with given K1L, K2L
+    usage: mult(name='MULT',L=0.,K1L=0.5)
+    '''
+    def __init__(self,name='M',L=0,K1L=0,K2L=0,Dx=0,Dy=0,Dphi=0):
+        self.name = str(name)
+        self.L = float(L)
+        if L != 0:
+            raise RuntimeError("mutipole must be thin") 
+        self.K1L = float(K1L)
+        self.K2L = float(K2L)
+        self.Dx = float(Dx)
+        self.Dy = float(Dy)
+        self.Dphi = float(Dphi)
+        self.update()
+
+    def __repr__(self):
+        return '%s: %s, L = %g, K1L = %15.8f,K2L = %15.8f'%(
+            self.name,self.__class__.__name__,self.L,self.K1L,self.K2L)
+
+    def transmatrix(self):
+        self.tm = np.mat(np.eye(6))
+        self.tm[1,0] = -self.K1L
+        self.tm[3,2] = self.K1L
+        # ---  if there is skew quad, 2-beta is not good
+        if self.Dphi != 0.:
+            r1 = rotmat(-self.Dphi)
+            r0 = rotmat(self.Dphi)
+            self.tm = r1*self.tm*r0
+
+    def update(self):
+        '''
+        update transport (M) and Twiss (Nx,y) matrices with current 
+        element parameters, settings for 4th order symplectic pass
+        '''
+        super(mult,self).update()
+
+    def sympass4(self,x0):
+        '''
+        tracking with 4th order symplectic integrator
+        '''
+        x = np.mat(np.array(x0,dtype=float)).reshape(6,-1)
+        if self.Dx != 0:
+            x[0] -= self.Dx
+        if self.Dy != 0:
+            x[2] -= self.Dy
+        if self.Dphi != 0:
+            x = rotmat(self.Dphi)*x
+        x1p,y1p = x[1],x[3]
+        x[1] -= self.K1L*x[0]/(1.+x[5]) + \
+                self.K2L/2*(np.multiply(x[0],x[0]) - \
+                            np.multiply(x[2],x[2]))/(1.+x[5])
+        x[3] += self.K1L*x[2]/(1.+x[5]) + \
+                self.K2L*(np.multiply(x[0],x[2]))/(1.+x[5])
+        if self.Dphi != 0:
+            x = rotmat(-self.Dphi)*x
+        if self.Dy != 0:
+            x[2] += self.Dy
+        if self.Dx != 0:
+            x[0] += self.Dx
+        return x
+
+
 class sole(drif):
     '''
     class: sole - define a solenoid with given length and KS
@@ -1185,71 +1511,6 @@ class sole(drif):
         x[4] += S-self.L
         return x
 
-
-class mult(drif):
-    '''
-    class: mult - define a thin-lens multipole with given K1L, K2L
-    usage: mult(name='MULT',L=0.,K1L=0.5)
-    '''
-    def __init__(self,name='M',L=0,K1L=0,K2L=0,Dx=0,Dy=0,Dphi=0):
-        self.name = str(name)
-        self.L = float(L)
-        if L != 0:
-            raise RuntimeError("mutipole must be thin") 
-        self.K1L = float(K1L)
-        self.K2L = float(K2L)
-        self.Dx = float(Dx)
-        self.Dy = float(Dy)
-        self.Dphi = float(Dphi)
-        self.update()
-
-    def __repr__(self):
-        return '%s: %s, L = %g, K1L = %15.8f,K2L = %15.8f'%(
-            self.name,self.__class__.__name__,self.L,self.K1L,self.K2L)
-
-    def transmatrix(self):
-        self.tm = np.mat(np.eye(6))
-        self.tm[1,0] = -self.K1L
-        self.tm[3,2] = self.K1L
-        # ---  if there is skew quad, 2-beta is not good
-        if self.Dphi != 0.:
-            r1 = rotmat(-self.Dphi)
-            r0 = rotmat(self.Dphi)
-            self.tm = r1*self.tm*r0
-
-    def update(self):
-        '''
-        update transport (M) and Twiss (Nx,y) matrices with current 
-        element parameters, settings for 4th order symplectic pass
-        '''
-        super(mult,self).update()
-
-    def sympass4(self,x0):
-        '''
-        tracking with 4th order symplectic integrator
-        '''
-        x = np.mat(np.array(x0,dtype=float)).reshape(6,-1)
-        if self.Dx != 0:
-            x[0] -= self.Dx
-        if self.Dy != 0:
-            x[2] -= self.Dy
-        if self.Dphi != 0:
-            x = rotmat(self.Dphi)*x
-        x1p,y1p = x[1],x[3]
-        x[1] -= self.K1L*x[0]/(1.+x[5]) + \
-                self.K2L/2*(np.multiply(x[0],x[0]) - \
-                            np.multiply(x[2],x[2]))/(1.+x[5])
-        x[3] += self.K1L*x[2]/(1.+x[5]) + \
-                self.K2L*(np.multiply(x[0],x[2]))/(1.+x[5])
-        if self.Dphi != 0:
-            x = rotmat(-self.Dphi)*x
-        if self.Dy != 0:
-            x[2] += self.Dy
-        if self.Dx != 0:
-            x[0] += self.Dx
-        return x
-
-
 class skew(quad):
     '''
     skew quad
@@ -1317,177 +1578,6 @@ class skew(quad):
         return x
 
 
-class bend(drif):
-    '''
-    class: bend - define a bend (dipole) with given parmeters
-    usage: bend(name='B1',L=1,angle=0.2,e1=0.1,e2=0.1,K1=0,K2=0)
-    
-    notice: it can have quadrupole and sextupole gradients integrated
-    '''
-    def __init__(self,name='B',L=1,angle=1e-9,\
-                 e1=0,e2=0,K1=0,K2=0,gap=0,fint=0,\
-                 nkick=10,Dx=0,Dy=0,Dphi=0):
-        self.name = str(name)
-        self.L = float(L)
-        self.angle = float(angle)
-        self.e1 = float(e1)
-        self.e2 = float(e2)
-        self.K1 = float(K1)
-        self.K2 = float(K2)
-        self.nkick = int(nkick)
-        self.R = self.L/self.angle
-        self.Dx = float(Dx)
-        self.Dy = float(Dy)
-        self.Dphi = float(Dphi)
-        self.gap = float(gap)
-        self.fint = float(fint)
-        self.update()
-
-    def __repr__(self):
-        return '%s: %s, L = %g, angle = %15.8f, e1 = %15.8f, e2 = %15.8f'%(
-            self.name,self.__class__.__name__,self.L,self.angle,self.e1,self.e2)
-
-    def transmatrix(self):
-        kx = self.K1+1/(self.R*self.R)
-        self.tm = np.mat(np.eye(6))
-        if kx > 0:
-            k = np.sqrt(kx)
-            p = k*self.L
-            self.tm[0:2,0:2] = np.array([[np.cos(p),np.sin(p)/k],
-                                         [-k*np.sin(p),np.cos(p)]])
-            self.tm[0:2,5:6] = np.array([[(1-np.cos(p))/(self.R*kx)],
-                                         [np.sin(p)/(self.R*k)]])
-            self.tm[4,0] = self.tm[1,5]
-            self.tm[4,1] = self.tm[0,5]
-            self.tm[4,5] = (k*self.L-np.sin(p))/self.R/self.R/k/kx
-        elif kx < 0:
-            k = np.sqrt(-kx)
-            p = k*self.L
-            self.tm[0:2,0:2] = np.array([[np.cosh(p),np.sinh(p)/k],
-                                         [k*np.sinh(p),np.cosh(p)]])
-            self.tm[0:2,5:6] = np.array([[(np.cosh(p)-1)/(-self.R*kx)],
-                                         [np.sinh(p)/(self.R*k)]])
-            self.tm[4,0] = self.tm[1,5]
-            self.tm[4,1] = self.tm[0,5]
-            self.tm[4,5] = (k*self.L-np.sinh(p))/self.R/self.R/k/kx
-        else:
-            self.tm[0,1] = self.L
-        if self.K1 > 0:
-            k = np.sqrt(self.K1)
-            p = k*self.L
-            self.tm[2:4,2:4] = np.array([[np.cosh(p),np.sinh(p)/k],
-                                         [k*np.sinh(p),np.cosh(p)]])
-        elif self.K1 < 0:
-            k = np.sqrt(-self.K1)
-            p = k*self.L
-            self.tm[2:4,2:4] = np.array([[np.cos(p),np.sin(p)/k],
-                                         [-k*np.sin(p),np.cos(p)]])
-        else:
-           self.tm[2,3] = self.L
-        #entrance
-        if self.gap!=0 and self.fint!=0:
-            cs = self.e1-1./self.R*self.gap*self.fint*(1.+np.sin(self.e1)**2)
-        else:
-            cs = self.e1
-        if cs != 0:
-            m1 = np.mat(np.eye(6))
-            m1[1,0] = np.tan(cs)/self.R
-            m1[3,2] = -m1[1,0]
-            self.m1 = m1
-            self.tm = self.tm*m1
-        #exit
-        if self.gap!=0 and self.fint!=0:
-            cs = self.e2-1./self.R*self.gap*self.fint*(1.+np.sin(self.e2)**2)
-        else:
-            cs = self.e2
-        if cs != 0:
-            m2 = np.mat(np.eye(6))
-            m2[1,0] = np.tan(cs)/self.R
-            m2[3,2] = -m2[1,0]
-            self.m2 = m2
-            self.tm = m2*self.tm
-        if self.Dphi != 0.:
-            r1 = rotmat(-self.Dphi)
-            r0 = rotmat(self.Dphi)
-            self.tm = r1*self.tm*r0
-
-    def update(self):
-        '''
-        update transport (M) and Twiss (Nx,y) matrices with current 
-        element parameters, settings for 4th order symplectic pass
-        '''
-        self.R = self.L/self.angle
-        super(bend,self).update()
-        self.setSympass()
-
-    def setSympass(self):
-        '''
-        set symplectic pass
-        '''
-        a =  0.675603595979828664
-        b = -0.175603595979828664
-        g =  1.351207191959657328
-        d = -1.702414383919314656
-        self.dL = self.L/self.nkick
-        self._Ma = np.mat(np.eye(6))
-        self._Ma[0,1] = a*self.dL
-        self._Ma[2,3] = self._Ma[0,1]
-        self._Mb = np.mat(np.eye(6))
-        self._Mb[0,1] = b*self.dL
-        self._Mb[2,3] = self._Mb[0,1]
-        self.Lg = g*self.dL
-        self.Ld = d*self.dL
-        self.K1Lg = g*self.K1*self.dL
-        self.K1Ld = d*self.K1*self.dL
-        self.K2Lg = g*self.K2*self.dL
-        self.K2Ld = d*self.K2*self.dL
-
-    def sympass4(self,x0):
-        '''
-        implement tracking with 4yh order symplectic integrator
-        '''
-        x = np.mat(np.array(x0,dtype=float)).reshape(6,-1)
-        S = 0.
-        if self.Dx != 0:
-            x[0] -= self.Dx
-        if self.Dy != 0:
-            x[2] -= self.Dy
-        if self.Dphi != 0:
-            x = rotmat(self.Dphi)*x
-        if hasattr(self,'m1'):
-            x = self.m1*x
-        for i in range(self.nkick):
-            x1p,y1p = x[1],x[3]
-            x1 = x[0]
-            x =  self._Ma*x
-            x[1] -= -self.K2Lg/2*(np.multiply(x[0],x[0])-np.multiply(x[2],x[2]))+\
-                    self.K1Lg*x[0]-self.Lg*x[5]/self.R+self.Lg*x[0]/self.R**2
-            x[3] += -self.K2Lg*(np.multiply(x[0],x[2]))+self.K1Lg*x[2]
-            x =  self._Mb*x
-            x[1] -= -self.K2Ld/2*(np.multiply(x[0],x[0])-np.multiply(x[2],x[2]))+\
-                    self.K1Ld*x[0]-self.Ld*x[5]/self.R+self.Ld*x[0]/self.R**2
-            x[3] += -self.K2Ld*(np.multiply(x[0],x[2]))+self.K1Ld*x[2]
-            x =  self._Mb*x
-            x[1] -= -self.K2Lg/2*(np.multiply(x[0],x[0])-np.multiply(x[2],x[2]))+\
-                    self.K1Lg*x[0]-self.Lg*x[5]/self.R+self.Lg*x[0]/self.R**2
-            x[3] += -self.K2Lg*(np.multiply(x[0],x[2]))+self.K1Lg*x[2]
-            x =  self._Ma*x
-            x2p,y2p = x[1],x[3]
-            x2 = x[0]
-            xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
-            xav = (x1+x2)/2
-            S += np.multiply(np.sqrt(1.+np.square(xp)+np.square(yp)),
-                             (1+xav/self.R))*self.dL
-        if hasattr(self,"m2"):
-            x = self.m2*x
-        if self.Dphi != 0:
-            x = rotmat(-self.Dphi)*x
-        if self.Dy != 0:
-            x[2] += self.Dy
-        if self.Dx != 0:
-            x[0] += self.Dx
-        x[4] += S-self.L
-        return x
 
 
 class wigg(drif):
