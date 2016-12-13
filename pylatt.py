@@ -1114,7 +1114,6 @@ class bend(drif):
         self._K1 = float(K1)
         self._K2 = float(K2)
         self._nkick = int(nkick)
-#        self._R = self.L/self.angle
         self._Dx = float(Dx)
         self._Dy = float(Dy)
         self._Dphi = float(Dphi)
@@ -1137,7 +1136,7 @@ class bend(drif):
             self._angle = float(value)
             self._update()
         except:
-            raise RuntimeError('angle must be float (or convertible)')
+            raise RuntimeError('angle must be non-zero float (or convertible)')
 
     @property
     def e1(self):
