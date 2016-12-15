@@ -170,6 +170,7 @@ class drif(object):
             x[4] += (np.sqrt(1.+np.square(x[1])+np.square(x[3]))-1.)*self.L
         return x
 
+
 class quad(drif):
     '''
     class: quad - define a quadrupole with given length and K1
@@ -309,10 +310,10 @@ class quad(drif):
             return x
 
 
-class matx(drif):
+class matr(drif):
     '''
-    class matx: define a linear element with its given 6x6 matrix
-    usage: M01 = matx(name='M01',tm=np.eye(6),Dx=0,Dy=0,Dphi=0,tag=[])
+    class matr: define a linear element with its given 6x6 matrix
+    usage: M01 = matr(name='M01',tm=np.eye(6),Dx=0,Dy=0,Dphi=0,tag=[])
 
     Parameter list:
     name:         element name
@@ -913,7 +914,7 @@ class kmap(drif):
     '''
     def __init__(self,name='ID01', L=0,
                  kmap1fn=None, kmap2fn=None,
-                 E=3,nkick=20,Dx=0,Dy=0,Dphi=0,Bw=1.8,wavelen=0.1):
+                 E=3,nkick=20,Dx=0,Dy=0,Dphi=0,Bw=1.8):
         self.name = str(name)
         self._L = float(L)
         self._kmap1fn = kmap1fn
@@ -924,7 +925,6 @@ class kmap(drif):
         self._Dy = float(Dy)
         self._Dphi = float(Dphi)
         self._Bw = Bw
-        self._wavelen = wavelen
         self._update()
 
     def __repr__(self):
@@ -1117,13 +1117,27 @@ class bend(drif):
     '''
     class: bend - define a bend (dipole) with given parmeters
     usage: B01 = bend(name='B01',L=1,angle=0.2,e1=0.1,e2=0.1,K1=0,
-                      K2=0,nkick=10,hgap=0,fint=0,Dx=0,Dy=0,Dphi=0,tag=[])
-    
+                      K2=0,nkick=10,hgap=0,fint=0.5,Dx=0,Dy=0,Dphi=0,tag=[])
+
+    Parameter list:
+    name:         element name
+    L:            length
+    angle:        bending angle
+    e1, e2:       fringe angles at entrance/exit
+    K1, K2:       integrated quad, sext component
+    nkick:        number of kicks for symplectic tracking
+    hgap:         half gap between two poles
+    fint:         fringe field integral
+    Dx, Dy, Dphi: misalignment in meter, radian
+    tm:           transport matrix 6x6
+    tx,ty:        twiss matrics 3x3 for x and y plane
+    tag:          tag list for searching
+
     notice: it can have quadrupole and sextupole gradients integrated
     '''
     def __init__(self,name='B',L=1,angle=1e-9,\
                  e1=0,e2=0,K1=0,K2=0,nkick=10,\
-                 hgap=0,fint=0,Dx=0,Dy=0,Dphi=0,tag=[]):
+                 hgap=0,fint=0.5,Dx=0,Dy=0,Dphi=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._angle = float(angle)
@@ -1227,6 +1241,10 @@ class bend(drif):
             self._update()
         except:
             raise RuntimeError('fint must be float (or convertible)')
+
+    @property
+    def R(self):
+        return self._R
 
     def _transmatrix(self):
         kx = self.K1+1/(self._R*self._R)
@@ -1380,10 +1398,16 @@ class wigg(drif):
     class: wigg - define a simple model for wiggler with given length and field
     usage: WG01 = wigg(name='WG01',L=1,Bw=1,E=3,Dx=0,Dy=0,Dphi=0,tag=[])
 
-    Bw: average wiggler field strength within one half period
-    E: beam energy in GeV
+    parameter list:
+    name:         element name
+    L:            length
+    Dx, Dy, Dphi: misalignment in meter, radian
+    Bw:           average wiggler field strength within one half period
+    E:            beam energy in GeV used for normalize field
+    tag:          tag list used for searching
 
-    only used for radiation calculation
+    Notice:
+    this model basically is only used for radiation calculation
     '''
     def __init__(self,name='WG01',L=1,Bw=1,E=3,Dx=0,Dy=0,Dphi=0,tag=[]):
         self.name = str(name)
@@ -1446,19 +1470,15 @@ class beamline():
     
     twx0, twy0, dx: Twiss paramters at the starting point
                     3x1 matrix
-    notice: 
     '''
     def __init__(self,bl,twx0=[10,0,0.1],twy0=[10,0,0.1],
-                 dxy0=[0,0,0,0,0],em=[1000.,1000.],sige=1e-2,N=1,E=3):
+                 dxy0=[0,0,0,0,1],em=[1000.,1000.],sige=1e-2,N=1,E=3):
         self.E = float(E)
         self.N = int(N)
         self.bl = [ele for ele in flatten(bl)]*self.N
-        try:
-            self.twx = np.array(twx0).reshape(3,1)
-            self.twy = np.array(twy0).reshape(3,1)
-            self.dxy = np.array(dxy0).reshape(-1,1)
-        except:
-            raise RuntimeError('initial Twiss and dispersion dimension must be 3')
+        self.twx = np.array(twx0).reshape(3,1)
+        self.twy = np.array(twy0).reshape(3,1)
+        self.dxy = np.array(dxy0).reshape(-1,1)
         self.twx[2,0] = (1+self.twx[1,0]*self.twx[1,0])/self.twx[0,0]
         self.twy[2,0] = (1+self.twy[1,0]*self.twy[1,0])/self.twy[0,0]
         self.dxy[-1,0] = 1
@@ -1507,8 +1527,8 @@ class beamline():
         betax/y, alfax/y are 1D array, duplicate data are kept for convinence
         '''
         for elem in self.bl:
-            mx = np.take(np.take(elem.tm,[0,1,5],axis=0),[0,1,5],axis=1)
-            my = np.take(np.take(elem.tm,[2,3,5],axis=0),[2,3,5],axis=1)
+            mx = elem.tm[0:2,0:2]
+            my = elem.tm[2:4,2:4]
             if elem.L < 0:
                 neglen = True
             else:
@@ -1622,7 +1642,7 @@ class beamline():
         s = [0.]
         ax = plt.gca()
         for e in self.bl:
-            if e.__class__.__name__ in ['aper','drif','matx']:
+            if e.__class__.__name__ in ['aper','drif','matr']:
                 pass
             elif e.__class__.__name__ == 'quad':
                 ax.add_patch(mpatches.Rectangle(
@@ -1665,12 +1685,9 @@ class beamline():
                  etaxfactor=10,etayfactor=10):
         '''
         plot twiss and dispersion
-        parameters: save:      bool, if true, save the plot into the file
-                               with the given name as 'fn = xxx.xxx'
-                    fn:        str,  specify the file name if save is true 
+        parameters: savefn:    string, if given, save the plot to the file
                     srange:    float/list, a list with two elements to define
                                [s-begin, s-end], whole beam-line by default
-        updated on 2013-12-11, add srange option suggested by S. Krinsky
         '''
         plt.figure(figsize=figsize)
         plt.plot(self.s,self.betax,'r',linewidth=2,label=r'$\beta_x$')
@@ -1683,8 +1700,8 @@ class beamline():
         if srange:
             size = plt.axis()
             plt.axis([srange[0],srange[1],size[2],size[3]])
-        plt.xlabel(r'$s$ (m)')
-        plt.ylabel(r'$\beta$ and $\eta$ (m)')
+        plt.xlabel(r'$s$ (m)',fontsize=15)
+        plt.ylabel(r'$\beta$ and $\eta$ (m)',fontsize=15)
         plt.legend(bbox_to_anchor=(0, 1.005, 1, .1), loc=3,
                    ncol=4, mode="expand",borderaxespad=0.)
         if savefn:
@@ -1769,13 +1786,13 @@ class beamline():
             elif e.__class__.__name__ == 'wigg':
                 s = '{0} = latt.wigg("{1}",L={2},Bw={3})\n'\
                     .format(e.name,e.name,e.L,e.Bw)
-            elif e.__class__.__name__ == 'matx':
+            elif e.__class__.__name__ == 'matr':
                 fmt = '  [%13.8f,%13.8f,%13.8f,%13.8f,%13.8f,%13.8f],\n'
                 m66 = '[\n'
                 for mi in range(6):
                     m66 += fmt%tuple(e.tm[mi])
                 m66 = m66[:-2] +']\n'
-                s = '{0} = latt.matx("{1}",L={2},mat={3})\n'\
+                s = '{0} = latt.matr("{1}",L={2},mat={3})\n'\
                     .format(e.name,e.name,e.L,m66)
             else:
                 raise RuntimeError('unknown element type: {0}'.\
@@ -1853,7 +1870,6 @@ class beamline():
         klist = nk[1:-1]
         self.mlist = mlist
         self.klist = klist
-
 
     def eletrack(self,x0,startIndex=0,endIndex=None):
         '''
@@ -2088,7 +2104,6 @@ class cell(beamline):
             self.twy = np.array([betay,alfay,gamay]).reshape(3,1)
             self.isstable = True
 
-
     def rmattr(self,attrs):
         '''
         rm attributes, eg. if no stable solution exists, all perodical
@@ -2097,7 +2112,6 @@ class cell(beamline):
         for attr in attrs:
             if hasattr(self,attr):
                 delattr(self,attr)
-
 
     def __repr__(self):
         '''
@@ -2343,7 +2357,6 @@ class cell(beamline):
                 t2 = np.tan(e2)/R
                 b0 = self.twx[0,i]
                 a0 = self.twx[1,i]
-                #g0 = self.twx[2,i]
                 eta0 = self.etax[i]
                 etap0 = self.etaxp[i]
                 etap1 = etap0+eta0*t1
@@ -2402,36 +2415,7 @@ class cell(beamline):
         self.sigy =[np.sqrt(self.twy[0,m]*self.emity*1e-9) 
                     for m in range(len(self.s))]
         if includeWig:
-            '''
-            # --- Sam's code
-            ind = self.getIndex('kmap',prefix='dw',exitport=0)
-            E0 = self.bl[ind[0]].E
-            gam = 1957.*E0
-            rho = 88.5*E0**4/self.U0
-            Uw = 0.
-            f,u2,u3,Ut = 0.,0.,0.,0.
-            f0 = 2.*3.84e-4*gam**2*rho/(3.*np.pi**2*self.emitx)
-            for i in ind:
-                elem = self.bl[i]
-                bx0 = self.betax[i]
-                bxav = bx0+elem.L**2/(12.*bx0)
-                rhow = 3.33*elem.E/elem.Bw
-                deltaw = elem.wavelen/(twopi*rhow)
-                u = elem.L/(2.*twopi*rho)
-                u2 += u*(rho/rhow)**2
-                u3 += u*(rho/rhow)**3*8./(3.*np.pi)
-                Uw += elem.L/(2*twopi*rhow**2)
-                f += (elem.L/rhow**3)*(deltaw**2*bxav/5. + \
-                                       self.etax[i]**2/bx0+bx0*self.etaxp[i]**2)
-            self.Uw = 88.5*E0**4*Uw
-            self.Ut = self.U0+self.Uw
-            self.emitxw = self.emitx/(1+self.Uw/self.U0)
-            self.sigew = self.sige*np.sqrt((1.+u3)/(1.+u2))
-            self.tauw = self.tau0*self.U0/self.Ut
-            #f = f0*f # I don't know what it is
-            #print u3,u2
-            '''
-            # --- S.Y. Lee
+            # --- S.Y. Lee's book formulae
             Uw,u3,u2 = 0,0,0
             dwIndex = self.getIndex('kmap',prefix='dw',exitport=0)
             E0 = self.bl[dwIndex[0]].E
@@ -2483,7 +2467,6 @@ class cell(beamline):
         self.bucketHeight = np.sqrt(2.*self.Vrf/ \
                                     (self.E*1e9*np.pi*self.h*abs(self.alphac)))
 
-
     def synHam(self,dE,phi,ho=False):
         '''
         calculate synchrotron oscillation Hamiltonian with
@@ -2507,7 +2490,6 @@ class cell(beamline):
                  (phi-self.phaserf)*np.sin(self.phaserf))
         return H
 
-
     def chrom(self,cor=True):
         '''
         Calculates linear chromaticity dnu/(dE/E)
@@ -2524,7 +2506,7 @@ class cell(beamline):
         chx0 = 0.
         chy0 = 0.
         for i, elem in enumerate(self.bl):
-            if elem.__class__.__name__ in ['drif','moni','aper','wigg','matx','sole']:
+            if elem.__class__.__name__ in ['drif','moni','aper','wigg','matr','sole']:
                 continue
             if elem.__class__.__name__ == 'mult':
                 dchx = -elem.K1L*self.betax[i]
@@ -2547,15 +2529,15 @@ class cell(beamline):
                 mx,my,tx,ty = twmat(elem,s[j])
                 wx = twisstrans(tx,self.twx[:,i])
                 wy = twisstrans(ty,self.twy[:,i])
-                dx = mx*np.take(self.dxy[:,i],[0,1,4],axis=0)
-                betax.append(wx[0,0])
-                alphax.append(wx[1,0])
-                gammax.append(wx[2,0])
-                betay.append(wy[0,0])
-                alphay.append(wy[1,0])
-                gammay.append(wy[2,0])
-                eta.append(dx[0,0])
-                etap.append(dx[1,0])
+                dx = mx.dot(np.take(self.dxy[:,i],[0,1,4],axis=0))
+                betax.append(wx[0])
+                alphax.append(wx[1])
+                gammax.append(wx[2])
+                betay.append(wy[0])
+                alphay.append(wy[1])
+                gammay.append(wy[2])
+                eta.append(dx[0])
+                etap.append(dx[1])
             betax,alphax,gammax = np.array(betax),np.array(alphax),np.array(gammax)
             betay,alphay,gammay = np.array(betay),np.array(alphay),np.array(gammay)
             eta,etap = np.array(eta),np.array(etap)
@@ -2569,42 +2551,35 @@ class cell(beamline):
             elif elem.__class__.__name__ == 'bend':
                 h = elem.angle/elem.L
                 if elem.K1 == 0.:
-                    dchx = -h**2*sum(w*betax)-2*h*sum(w*etap*alphax)+\
+                    dchx = -h**2*sum(w*betax)-2*h*sum(w*etap*alphax) + \
                            h*sum(w*eta*gammax)
                     dchy = h*sum(w*eta*gammay)
                 else:
-                    dchx = -(elem.K1+h**2)*sum(w*betax)-\
+                    dchx = -(elem.K1+h**2)*sum(w*betax) - \
                            2*elem.K1*h*sum(w*eta*betax) - \
-                        2*h*sum(w*etap*alphax)+h*sum(w*eta*gammax)
+                           2*h*sum(w*etap*alphax)+h*sum(w*eta*gammax)
                     dchy = elem.K1*sum(w*betay)-h*elem.K1*sum(w*eta*betay)+\
                            h*sum(w*eta*gammay)
                 if hasattr(elem,'K2'):
-                    dchx +=  elem.K2*sum(w*eta*betax)
-                    dchy += -elem.K2*sum(w*eta*betay)
+                    dchx += elem.K2*sum(w*eta*betax)
+                    dchy -= elem.K2*sum(w*eta*betay)
                 b0x = self.twx[0,i]
                 b0y = self.twy[0,i]
                 b1x = self.twx[0,i+1]
                 b1y = self.twy[0,i+1]
-                dchx +=  h*b0x*np.tan(elem.e1)+h*b1x*np.tan(elem.e2)
-                dchy += -h*b0y*np.tan(elem.e1)-h*b1y*np.tan(elem.e2)
+                dchx += h*b0x*np.tan(elem.e1)+h*b1x*np.tan(elem.e2)
+                dchy -= h*b0y*np.tan(elem.e1)+h*b1y*np.tan(elem.e2)
                 chx += dchx
                 chy += dchy
                 chx0 += dchx
                 chy0 += dchy
             elif elem.__class__.__name__ == 'sext' and cor:
-                if elem.L == 0.:
-                    dchx =  elem.K2*self.etax[i]*self.twx[0,i]
-                    dchy = -elem.K2*self.etax[i]*self.twy[0,i]
-                else:
-                    dchx = elem.K2*sum(w*eta*betax)
-                    dchy =-elem.K2*sum(w*eta*betay)
-                chx += dchx
-                chy += dchy
+                chx += elem.K2*sum(w*eta*betax)
+                chy -= elem.K2*sum(w*eta*betay)
         self.chx = chx/(2*twopi)*self.N
         self.chy = chy/(2*twopi)*self.N
         self.chx0 = chx0/(2*twopi)*self.N
         self.chy0 = chy0/(2*twopi)*self.N
-
 
     def cchrom(self,var,ch=[0,0],minSextValue=False):
         '''
@@ -4307,8 +4282,6 @@ def gint(a,b):
     return x,w
 
 
-
-
 def twmat(elem,s):
     '''
     Computes the transport and twiss matrix for transport
@@ -5157,83 +5130,59 @@ def f22tm_1(f2):
     Hamilton-Cayley, see A. Chao's lecture 9, page 21 
     '''
     n = f2.index.shape[1]
-    
     F = np.zeros((4,4))
-
     idx = np.zeros(n,dtype=int)
     idx[0] = 2
     F[0,0] = f2.pickWithIndex(idx)*(-2)
-
     idx = np.zeros(n,dtype=int)
     idx[0] = 1
     idx[1] = 1
     F[0,1] = f2.pickWithIndex(idx)*(-1)
-
     idx = np.zeros(n,dtype=int)
     idx[0] = 1
     idx[2] = 1
     F[0,2] = f2.pickWithIndex(idx)*(-1)
-    
     idx = np.zeros(n,dtype=int)
     idx[0] = 1
     idx[3] = 1
     F[0,3] = f2.pickWithIndex(idx)*(-1)
-
     F[1,0] = F[0,1]
-
     idx = np.zeros(n,dtype=int)
     idx[1] = 2
     F[1,1] = f2.pickWithIndex(idx)*(-2)
-
     idx = np.zeros(n,dtype=int)
     idx[1] = 1
     idx[2] = 1
     F[1,2] = f2.pickWithIndex(idx)*(-1)
-
     idx = np.zeros(n,dtype=int)
     idx[1] = 1
     idx[3] = 1
     F[1,3] = f2.pickWithIndex(idx)*(-1)
-
     F[2,0] = F[0,2]
-
     F[2,1] = F[1,2]
-
     idx = np.zeros(n,dtype=int)
     idx[2] = 2
     F[2,2] = f2.pickWithIndex(idx)*(-2)
-
     idx = np.zeros(n,dtype=int)
     idx[2] = 1
     idx[3] = 1
     F[2,3] = f2.pickWithIndex(idx)*(-1)
-
     F[3,0] =F[0,3]
-
     F[3,1] =F[1,3]
-
     F[3,2] =F[2,3]
-
     idx = np.zeros(n,dtype=int)
     idx[3] = 2
     F[3,3] = f2.pickWithIndex(idx)*(-2)
-
     SF = np.dot(symJ(nvar=4),F)
-    
     w = np.linalg.eig(SF)[0]
-
     a = np.ones((4,4),dtype=complex)
     a[:,1] = w
     a[:,2] = w*w
     a[:,3] = a[:,2]*w
-
     b = np.array([np.exp(wi) for wi in w])
-
     x = np.dot(np.linalg.inv(a),b)
-    
     SF2 = np.dot(SF,SF)
     SF3 = np.dot(SF2,SF)
-
     M = x[0]*np.eye(4)+x[1]*SF+x[2]*SF2+x[3]*SF3
     return M.real
 
