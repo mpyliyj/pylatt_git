@@ -1463,7 +1463,7 @@ class wigg(drif):
             self._tm = r1.dot(self.tm).dot(r0)
 
 
-class beamline():
+class beamline(object):
     '''
     class: beamline - define a beamline with a squence of magnets
     usage: beamline(bl,twx0,twy0,dx0,N=1,E=3)
@@ -1471,31 +1471,256 @@ class beamline():
     twx0, twy0, dx: Twiss paramters at the starting point
                     3x1 matrix
     '''
-    def __init__(self,bl,twx0=[10,0,0.1],twy0=[10,0,0.1],
-                 dxy0=[0,0,0,0,1],em=[1000.,1000.],sige=1e-2,N=1,E=3):
-        self.E = float(E)
-        self.N = int(N)
-        self.bl = [ele for ele in flatten(bl)]*self.N
-        self.twx = np.array(twx0).reshape(3,1)
-        self.twy = np.array(twy0).reshape(3,1)
-        self.dxy = np.array(dxy0).reshape(-1,1)
-        self.twx[2,0] = (1+self.twx[1,0]*self.twx[1,0])/self.twx[0,0]
-        self.twy[2,0] = (1+self.twy[1,0]*self.twy[1,0])/self.twy[0,0]
-        self.dxy[-1,0] = 1
-        self.emitx = float(em[0])
-        self.emity = float(em[1])
-        self.sige = float(sige)
-        self.update()
+    def __init__(self,bl,betax0=10,alfax0=0,betay0=10,alfay0=0,
+                 etax0=0,etaxp0=0,etay0=0,etayp0=0,
+                 emitx=1000,emity=1000,sige=1e-2,E=3):
+        self._bl = [ele for ele in flatten(bl)]
+        self._E = float(E)
+        self._betax0,self._alfax0,self._betay0,self._alfay0 = betax0,alfax0,betay0,alfay0
+        self._etax0,self._etaxp0,self._etay0,self._etayp0 = etax0,etaxp0,etay0,etayp0
+        self._emitx = float(emitx)
+        self._emity = float(emity)
+        self._sige = float(sige)
+        self._update()
 
-    def update(self):
-        self.mux,self.muy = [0.],[0.]
-        self.spos()
-        self.twiss()
-        self.disp()
-        self.sigx = [np.sqrt(self.betax[m]*self.emitx*1e-9)
-                     +abs(self.dxy[0,m])*self.sige for m in range(len(self.s))]
-        self.sigy = [np.sqrt(self.betay[m]*self.emity*1e-9)
-                     for m in range(len(self.s))]
+    @property
+    def E(self):
+        return self._E
+
+    @E.setter
+    def E(self,value):
+        try:
+            self._E = float(value)
+            self._update()
+        except:
+            raise RuntimeError('E must be float (or convertible)')
+
+    @property
+    def bl(self):
+        return self._bl
+
+    @bl.setter
+    def bl(self,value):
+        try:
+            self._bl = list(value)
+            self._update()
+        except:
+            raise RuntimeError('bl must be a list of magnet instances (or convertible)')
+
+    @property
+    def betax0(self):
+        return self._betax0
+
+    @betax0.setter
+    def betax0(self,value):
+        try:
+            self._betax0 = float(value)
+            self._update()
+        except:
+            raise RuntimeError('betax0 must be float (or convertible)')
+
+    @property
+    def alfax0(self):
+        return self._alfax0
+
+    @alfax0.setter
+    def alfax0(self,value):
+        try:
+            self._alfax0 = float(value)
+            self._update()
+        except:
+            raise RuntimeError('alfax0 must be float (or convertible)')
+
+    @property
+    def betay0(self):
+        return self._betay0
+
+    @betay0.setter
+    def betay0(self,value):
+        try:
+            self._betay0 = float(value)
+            self._update()
+        except:
+            raise RuntimeError('betay0 must be float (or convertible)')
+
+    @property
+    def alfay0(self):
+        return self._alfay0
+
+    @alfay0.setter
+    def alfay0(self,value):
+        try:
+            self._alfay0 = float(value)
+            self._update()
+        except:
+            raise RuntimeError('alfay0 must be float (or convertible)')
+
+    @property
+    def etax0(self):
+        return self._etax0
+
+    @etax0.setter
+    def etax0(self,value):
+        try:
+            self._etax0 = float(value)
+            self._update()
+        except:
+            raise RuntimeError('etax0 must be float (or convertible)')
+
+    @property
+    def etaxp0(self):
+        return self._etaxp0
+
+    @etaxp0.setter
+    def etaxp0(self,value):
+        try:
+            self._etaxp0 = float(value)
+            self._update()
+        except:
+            raise RuntimeError('etaxp0 must be float (or convertible)')
+
+    @property
+    def etay0(self):
+        return self._etay0
+
+    @etay0.setter
+    def etay0(self,value):
+        try:
+            self._etay0 = float(value)
+            self._update()
+        except:
+            raise RuntimeError('etay0 must be float (or convertible)')
+
+    @property
+    def etayp0(self):
+        return self._etayp0
+
+    @etayp0.setter
+    def etayp0(self,value):
+        try:
+            self._etayp0 = float(value)
+            self._update()
+        except:
+            raise RuntimeError('etayp0 must be float (or convertible)')
+
+    @property
+    def emitx(self):
+        return self._emitx
+
+    @emitx.setter
+    def emitx(self,value):
+        try:
+            self._emitx = float(value)
+            self._update()
+        except:
+            raise RuntimeError('emitx must be float (or convertible)')
+
+    @property
+    def emity(self):
+        return self._emity
+
+    @emity.setter
+    def emity(self,value):
+        try:
+            self._emity = float(value)
+            self._update()
+        except:
+            raise RuntimeError('emity must be float (or convertible)')
+
+    @property
+    def sige(self):
+        return self._sige
+
+    @sige.setter
+    def sige(self,value):
+        try:
+            self._sige = float(value)
+            self._update()
+        except:
+            raise RuntimeError('sige must be float (or convertible)')
+
+    @property
+    def s(self):
+        return self._s
+
+    @property
+    def betax(self):
+        return self._betax
+
+    @property
+    def betay(self):
+        return self._betay
+
+    @property
+    def alfax(self):
+        return self._alfax
+
+    @property
+    def alfay(self):
+        return self._alfay
+
+    @property
+    def mux(self):
+        return self._mux
+
+    @property
+    def muy(self):
+        return self._muy
+
+    @property
+    def etax(self):
+        return self._etax
+
+    @property
+    def etaxp(self):
+        return self._etaxp
+
+    @property
+    def etay(self):
+        return self._etay
+
+    @property
+    def etayp(self):
+        return self._etayp
+
+    @property
+    def sigx(self):
+        return self._sigx
+
+    @property
+    def sigy(self):
+        return self._sigy
+
+    @property
+    def nux(self):
+        return self._nux
+
+    @property
+    def nuy(self):
+        return self._nuy
+
+    @property
+    def L(self):
+        return self._L
+
+    def _update(self):
+        self._bl = self.bl
+        self._mux,self._muy = [0.],[0.]
+        self._twx = np.array([self.betax0,self.alfax0
+                              ,(1+self.alfax0*self.alfax0)/self.betax0],
+                             float).reshape(3,1)
+        self._twy = np.array([self.betay0,self.alfay0,
+                              (1+self.alfay0*self.alfay0)/self.betay0],
+                             float).reshape(3,1)
+        self._dxy = np.array([self.etax0,self.etaxp0,self.etay0,self.etayp0,1],
+                             float).reshape(-1,1)
+        self._spos()
+        self._twiss()
+        self._disp()
+        self._sigx = [np.sqrt(self.betax[m]*self.emitx*1e-9)
+                      +abs(self.etax[m])*self.sige for m in range(len(self.s))]
+        self._sigy = [np.sqrt(self.betay[m]*self.emity*1e-9)
+                      for m in range(len(self.s))]
 
     def __repr__(self):
         s = ''
@@ -1511,17 +1736,17 @@ class beamline():
         s += 'Tune: nux = %11.3f, nuy = %11.3f\n'%(self.nux,self.nuy)+'\n'
         return s
 
-    def spos(self):
+    def _spos(self):
         '''
         get s coordinates for each element
         '''
         s = [0]
         for elem in self.bl:
             s.append(s[-1]+elem.L)
-        self.s = np.array(s)
-        self.L = s[-1]
+        self._s = np.array(s)
+        self._L = s[-1]
 
-    def twiss(self):
+    def _twiss(self):
         '''
         get twiss parameters along s. twx/y are matrix format,
         betax/y, alfax/y are 1D array, duplicate data are kept for convinence
@@ -1533,29 +1758,44 @@ class beamline():
                 neglen = True
             else:
                 neglen = False
-            self.mux = np.append(self.mux,self.mux[-1]+phasetrans(mx,self.twx[:,-1],neglen=neglen))
-            self.muy = np.append(self.muy,self.muy[-1]+phasetrans(my,self.twy[:,-1],neglen=neglen))
-            self.twx = np.append(self.twx,twisstrans(elem.tx,self.twx[:,-1]).reshape(3,1),axis=1)
-            self.twy = np.append(self.twy,twisstrans(elem.ty,self.twy[:,-1]).reshape(3,1),axis=1)
-        self.betax = self.twx[0]
-        self.betay = self.twy[0]
-        self.alfax = self.twx[1]
-        self.alfay = self.twy[1]
-        self.gamax = self.twx[2]
-        self.gamay = self.twy[2]
-        self.nux = self.N*self.mux[-1]
-        self.nuy = self.N*self.muy[-1]
+            self._mux = np.append(self.mux,self.mux[-1]+phasetrans(mx,self._twx[:,-1],neglen=neglen))
+            self._muy = np.append(self.muy,self.muy[-1]+phasetrans(my,self._twy[:,-1],neglen=neglen))
+            self._twx = np.append(self._twx,twisstrans(elem.tx,self._twx[:,-1]).reshape(3,1),axis=1)
+            self._twy = np.append(self._twy,twisstrans(elem.ty,self._twy[:,-1]).reshape(3,1),axis=1)
+        self._betax = self._twx[0]
+        self._betay = self._twy[0]
+        self._alfax = self._twx[1]
+        self._alfay = self._twy[1]
+        self._gamax = self._twx[2]
+        self._gamay = self._twy[2]
+        self._nux = self.mux[-1]
+        self._nuy = self.muy[-1]
 
-    def getElements(self,types=['drif','bend','quad','sext','moni',
-                                'aper','kick','wigg','kmap','skew',
-                                'rfca'],
+    def _disp(self):
+        '''
+        get dispersion along s
+        '''
+        for elem in self.bl:
+            m = np.take(np.take(elem.tm,[0,1,2,3,5],axis=0),
+                        [0,1,2,3,5],axis=1)
+            self._dxy = np.append(self._dxy,m.dot(self._dxy[:,-1]).reshape(-1,1),axis=1)
+        self._etax =  self._dxy[0]
+        self._etaxp = self._dxy[1]
+        self._etay =  self._dxy[2]
+        self._etayp = self._dxy[3]
+
+
+    def getElements(self,types=['aper','bend','drif','kick','kmap',
+                                'matr','moni','octu','quad','rfca',
+                                'sext','wigg'],
                     prefix='',suffix='',include='',exclude='',
-                    lors='list'):
+                    unique=False):
         '''
         get all elements in the given types and with element name
         * start with 'prefix'
         * ends with 'suffix'
         * include 'include'
+        * exclude 'exclude'
         if lors == 'list' return a list, otherwise return a set
         used for optimization
         '''
@@ -1569,29 +1809,26 @@ class beamline():
                 cond = cond and exclude not in el.name
             if cond:
                 ele.append(el)
-        if lors == 'list':
-            return ele
+        if unique:
+            return list(set(ele))
         else:
-            return set(ele) 
+            return ele 
         
     def getSIndex(self,s0):
         '''
-        get the nearest element index which is neighboring to s0
+        get the s index where s0 is in-between
         '''
         s0 = float(s0)
-        if s0 < 0:
+        if s0 <= 0:
             return 0
-        elif s0 > self.s[-1]:
+        elif s0 >= self.L:
             return -1
         else:
-            m = np.nonzero(np.array(self.s) > s0)[0][0]
-            if s0-self.s[m-1] > self.s[m]-s0:
-                return m
-            else:
-                return m-1
+            m = np.nonzero(self.s>=s0)[0][0]
+            return m-1,m
 
     def getIndex(self,types,prefix='',suffix='',include='',
-                 exclude='',exitport=True):
+                 exclude=''):
         '''
         get all element index with the given types and 
         starts/ends with the specified string
@@ -1600,7 +1837,7 @@ class beamline():
         suffix:   str, which is the string element name ends with
         exitport: bool, entrance or exit, if True exit, otherwise entrance
         '''
-        a = []
+        idx = []
         for i,el in enumerate(self.bl):
             cond = el.__class__.__name__ in types  \
                    and el.name.startswith(prefix) \
@@ -1609,24 +1846,8 @@ class beamline():
             if len(exclude):
                 cond = cond and exclude not in el.name
             if cond:
-                if exitport:
-                    a.append(i+1)
-                else:
-                    a.append(i)
-        return np.array(a)
-
-    def disp(self):
-        '''
-        get dispersion along s
-        '''
-        for elem in self.bl:
-            m = np.take(np.take(elem.tm,[0,1,2,3,5],axis=0),
-                        [0,1,2,3,5],axis=1)
-            self.dxy = np.append(self.dxy,m.dot(self.dxy[:,-1]).reshape(-1,1),axis=1)
-        self.etax =  self.dxy[0]
-        self.etaxp = self.dxy[1]
-        self.etay =  self.dxy[2]
-        self.etayp = self.dxy[3]
+                idx.append(i)
+        return idx
 
     def pltmag(self,unit=1.0,surflvl=0,alfa=1):
         '''
@@ -1647,9 +1868,9 @@ class beamline():
             elif e.__class__.__name__ == 'quad':
                 ax.add_patch(mpatches.Rectangle(
                         (s[-1],surflvl-qh),e.L,2*qh,fc='y',ec='y',alpha=alfa))
-            elif e.__class__.__name__ == 'skew':
+            elif e.__class__.__name__ == 'octu':
                 ax.add_patch(mpatches.Rectangle(
-                        (s[-1],surflvl-qh),e.L,2*qh,fc='c',ec='c',alpha=alfa))
+                        (s[-1],surflvl-sh),e.L,2*sh,fc='c',ec='c',alpha=alfa))
             elif e.__class__.__name__ == 'sext':
                 ax.add_patch(mpatches.Rectangle(
                         (s[-1],surflvl-sh),e.L,2*sh,fc='r',ec='r',alpha=alfa))
@@ -1668,21 +1889,21 @@ class beamline():
             elif e.__class__.__name__ == 'rfca':
                 ax.add_patch(mpatches.Rectangle(
                         (s[-1],surflvl-mrf),e.L,2*mrf,fc='r',ec='r',alpha=alfa))
-            elif e.__class__.__name__ == 'sole':
-                ax.add_patch(mpatches.Rectangle(
-                        (s[-1],surflvl-mrf),e.L,2*kh,fc='c',ec='c',alpha=alfa))
-            elif e.__class__.__name__ == 'mult':
-                ax.add_patch(mpatches.Rectangle(
-                        (s[-1],surflvl-mrf),e.L,2*mc,fc='k',ec='k',alpha=alfa))
+            #elif e.__class__.__name__ == 'sole':
+            #    ax.add_patch(mpatches.Rectangle(
+            #            (s[-1],surflvl-mrf),e.L,2*kh,fc='c',ec='c',alpha=alfa))
+            #elif e.__class__.__name__ == 'mult':
+            #    ax.add_patch(mpatches.Rectangle(
+            #            (s[-1],surflvl-mrf),e.L,2*mc,fc='k',ec='k',alpha=alfa))
             else:
                 print('unknown type: %s'%e.__class__.__name__)
                 pass
             s += [s[-1]+e.L]
-        plt.plot(s,np.zeros(len(s))+surflvl,'k',linewidth=1.5)
+        plt.plot(s,np.zeros_like(s)+surflvl,'k',linewidth=1.5)
 
 
     def plttwiss(self,srange=None,savefn=None,figsize=(15,5),
-                 etaxfactor=10,etayfactor=10):
+                 etaxfactor=10,etayfactor=10,surflvl=0):
         '''
         plot twiss and dispersion
         parameters: savefn:    string, if given, save the plot to the file
@@ -1696,7 +1917,7 @@ class beamline():
                  label=r'$%i\times\eta_x$'%etaxfactor)
         plt.plot(self.s,self.etay*etayfactor,'m',linewidth=2,
                  label=r'$%i\times\eta_y$'%etayfactor)
-        self.pltmag(unit=max(self.betax)/20)
+        self.pltmag(unit=max(self.betax)/20,surflvl=surflvl)
         if srange:
             size = plt.axis()
             plt.axis([srange[0],srange[1],size[2],size[3]])
@@ -1708,7 +1929,8 @@ class beamline():
             plt.savefig(savefn)
         plt.show()
 
-    def pltsigma(self,srange=None,savefn=None,figsize=(15,5)):
+    def pltsigma(self,srange=None,savefn=None,figsize=(15,5),
+                 surflvl=0):
         '''
         plot transverse beam size along s
         parameters: save:      bool, if true, save the plot into the file
@@ -1723,21 +1945,22 @@ class beamline():
                  linewidth=2,label=r'$\sigma_x$')
         plt.plot(self.s,np.array(self.sigy)*unit,
                  linewidth=2,label=r'$\sigma_y$')
-        self.pltmag(unit=max(self.sigx)*unit/20)
+        self.pltmag(unit=max(self.sigx)*unit/20,surflvl=surflvl)
         if srange:
             size = plt.axis()
             plt.axis([srange[0],srange[1],size[2],size[3]])
-        plt.xlabel(r'$s$ (m)')
-        plt.ylabel(r'$\sigma_x$ (mm)')
+        plt.xlabel(r'$s$ (m)',fontsize=15)
+        plt.ylabel(r'$\sigma_x$ (mm)',fontsize=15)
         plt.legend(bbox_to_anchor=(0, 1.005, 1, .1), loc=3,
                    ncol=2, mode="expand",borderaxespad=0.)
         if savefn:
             plt.savefig(savefn)
         plt.show()
 
-    def savefile(self,fn='savefile.py',comment=None):
+    def savefile(self,fn='savefile.py',comment='your comment',cell=True):
         '''
         save current beamline to a python file
+        warning: element information is incompleted
         '''
         ele = list(set(self.bl))
         ele = sorted(ele, key=lambda el: el.__class__.__name__+el.name)
@@ -1750,24 +1973,27 @@ class beamline():
             if e.__class__.__name__ == 'drif':
                 s = '{0} = latt.drif("{1}",L={2})\n'.\
                     format(e.name,e.name,e.L)
+            elif e.__class__.__name__ == 'bend':
+                s = '{0} = latt.bend("{1}",L={2},angle={3},e1={4},e2={5},K1={6},K2={7},hgap={8},fint={9})\n' \
+                    .format(e.name,e.name,e.L,e.angle,e.e1,e.e2,e.K1,e.K2,e.hgap,e.fint)
             elif e.__class__.__name__ == 'quad':
-                s = '{0} = latt.quad("{1}",L={2},K1={3})\n'.\
-                    format(e.name,e.name,e.L,e.K1)
-            elif e.__class__.__name__ == 'sole':
-                s = '{0} = latt.sole("{1}",L={2},KS={3})\n'.\
-                    format(e.name,e.name,e.L,e.KS)
-            elif e.__class__.__name__ == 'mult':
-                s = '{0} = latt.mult("{1}",L={2},K1L={3}),K2L={4}\n'.\
-                    format(e.name,e.name,e.L,e.K1L,e.K2L)
-            elif e.__class__.__name__ == 'skew':
-                s = '{0} = latt.skew("{1}",L={2},K1={3},tilt={4})\n'.\
-                    format(e.name,e.name,e.L,e.K1,e.tilt)
+                s = '{0} = latt.quad("{1}",L={2},K1={3},Dphi={4})\n'.\
+                    format(e.name,e.name,e.L,e.K1,e.Dphi)
+            #elif e.__class__.__name__ == 'sole':
+            #    s = '{0} = latt.sole("{1}",L={2},KS={3})\n'.\
+            #        format(e.name,e.name,e.L,e.KS)
+            #elif e.__class__.__name__ == 'mult':
+            #    s = '{0} = latt.mult("{1}",L={2},K1L={3}),K2L={4}\n'.\
+            #        format(e.name,e.name,e.L,e.K1L,e.K2L)
+            #elif e.__class__.__name__ == 'skew':
+            #    s = '{0} = latt.skew("{1}",L={2},K1={3},tilt={4})\n'.\
+            #        format(e.name,e.name,e.L,e.K1,e.tilt)
             elif e.__class__.__name__ == 'sext':
                 s = '{0} = latt.sext("{1}",L={2},K2={3})\n'.\
                     format(e.name,e.name,e.L,e.K2)
-            elif e.__class__.__name__ == 'bend':
-                s = '{0} = latt.bend("{1}",L={2},angle={3},e1={4},e2={5},K1={6},K2={7})\n' \
-                    .format(e.name,e.name,e.L,e.angle,e.e1,e.e2,e.K1,e.K2)
+            elif e.__class__.__name__ == 'octu':
+                s = '{0} = latt.octu("{1}",L={2},K3={3})\n'.\
+                    format(e.name,e.name,e.L,e.K3)
             elif e.__class__.__name__ == 'kmap':
                 s = '{0} = latt.kmap("{1}",L={2},kmap1fn="{3}",kmap2fn="{4}",E={5})\n' \
                     .format(e.name,e.name,e.L,e.kmap1fn,e.kmap2fn,e.E) \
@@ -1787,7 +2013,7 @@ class beamline():
                 s = '{0} = latt.wigg("{1}",L={2},Bw={3})\n'\
                     .format(e.name,e.name,e.L,e.Bw)
             elif e.__class__.__name__ == 'matr':
-                fmt = '  [%13.8f,%13.8f,%13.8f,%13.8f,%13.8f,%13.8f],\n'
+                fmt = '  [%15.8f,%15.8f,%15.8f,%15.8f,%15.8f,%15.8f],\n'
                 m66 = '[\n'
                 for mi in range(6):
                     m66 += fmt%tuple(e.tm[mi])
@@ -1807,7 +2033,8 @@ class beamline():
                 BL = '   '
         BL = BL[0:-2] + ']\n'
         fid.write(BL)
-        fid.write('ring = latt.cell(BL)\n')
+        if cell:
+            fid.write('ring = latt.cell(BL)\n')
         fid.close()
 
     def saveLte(self,fn='temp.lte',simplify=False):
@@ -1815,10 +2042,11 @@ class beamline():
         save beamline into ELEGANT format file
         fn:       file's name for saving lattice
         simplify: bool, if True, ignore all drifts with zero length
+        warning: some elements need to be adjusted
         '''
         fid = open(fn,'w')
         fid.write('! === Convert from Yongjun Li\'s pylatt input \n')
-        fid.write('! === Caution: kickmaps need to be adjusted manually\n\n')
+        fid.write('! === Caution: some elements need to be adjusted manually\n\n')
         fid.write('! === Element definition:\n')
         eset = list(set(self.bl))
         eset = sorted(eset, key=lambda ele: ele.__class__.__name__+ele.name)
@@ -1827,10 +2055,11 @@ class beamline():
                 continue
             else:
                 aele = ei.__repr__() \
-                    .replace('sext','ksext') \
                     .replace('quad','kquad') \
                     .replace('skew','kquad') \
                     .replace('bend','csbend')\
+                    .replace('sext','ksext') \
+                    .replace('octu','koct') \
                     .replace('aper','scraper')+'\n'
                 fid.write(aele)
         fid.write('\n')
@@ -1849,36 +2078,42 @@ class beamline():
 
     def getMatLine(self):
         '''
-        prepare matrix and thin-lens kick for tracking
-        mlist is a list of transport matrices between two
-        adjacent npnlinear elements (sext and kmap)
-        klist is a list of nonlinear element position index
-        If dipole has sext-like component, don't use this function
-        '''
-        mlist = []
-        nk = [0]
-        for i,ele in enumerate(self.bl):
-            if ele.__class__.__name__ in ['sext','kmap']:
-                nk.append(i)
-        nk.append(len(self.bl))
-        for i,j in enumerate(nk[:-1]):
-            R = np.mat(np.eye(6))
-            for e in self.bl[nk[i]:nk[i+1]]:
-                if e.__class__.__name__ not in ['sext','kmap']:
-                    R = e.tm*R
-            mlist.append(R)
-        klist = nk[1:-1]
-        self.mlist = mlist
-        self.klist = klist
+        combine neighboring linear element as matrix list with nonlinear matrix in-between
 
-    def eletrack(self,x0,startIndex=0,endIndex=None):
+        alist: a list of matr elements with npnlinear elements in-between
+
+        If bends with sext or octu integrated, don't use this function
+        '''
+        alist = []
+        imat = 0
+        n = self.getIndex(['sext','octu'])
+        # --- 0 -> 1
+        if n[0]>0:
+            tmlist = [self.bl[j].tm for j in xrange(n[0])][::-1]
+            alist.append(matr('M%04i'%imat,L=self.s[n[0]],tm=reduce(np.dot,tmlist)))
+            imat += 1
+        alist.append(self.bl[n[0]])
+        # --- n
+        for i,ni in enumerate(n[:-1]):
+            tmlist = [self.bl[j].tm for j in xrange(ni+1,n[i+1])][::-1]
+            alist.append(matr('M%04i'%imat,L=self.s[n[i+1]]-self.s[ni+1],tm=reduce(np.dot,tmlist)))
+            imat += 1
+            alist.append(self.bl[n[i+1]])
+        # --- n -> end
+        if n[-1]<len(self.bl)-1:
+            tmlist = [self.bl[j].tm for j in xrange(n[-1]+1,len(self.bl))][::-1]
+            alist.append(matr('M%04i'%imat,L=self.L-self.s[n[-1]+1],tm=reduce(np.dot,tmlist)))
+        return alist
+
+    def eletrack(self,x0,startIndex=0,endIndex=None,fast=0):
         '''
         element by element track
         x0: 6d initial condition
         endIndex: element index in beamline where tracking stops
                   if None (by default), tracking whole beamline
         '''
-        xin = copy.deepcopy(np.array(x0,dtype=float)).reshape(6,-1)
+        if not fast:
+            x0 = np.array(x0,dtype=float).reshape(6,-1)
         if startIndex and startIndex>=0:
             sb = startIndex
         else:
@@ -1887,94 +2122,36 @@ class beamline():
             se = endIndex
         else:
             se = len(self.bl)
-        x = np.zeros((se-sb+1,xin.shape[0],xin.shape[1]))
-        x[0] = xin 
+        x = np.zeros((se-sb+1,x0.shape[0],x0.shape[1]))
+        x[0] = x0
         for i in xrange(sb,se):
-            xin[:6] = self.bl[i].sympass4(xin[:6])
-            x[i-sb+1] = xin
+            x0 = self.bl[i].sympass4(x0)
+            x[i-sb+1] = x0
         return x
 
-    def findClosedOrbit(self, niter=50,fixedenergy=0.0,
-                        tol=[1e-6,1e-7,1e-6,1e-7,1e-6,1e-6],
-                        sym4=True,verbose=False):
+    def getTransMat(self,startIndex=0,endIndex=None):
         '''
-        find closed orbit by iteration
-        niter: number of iterations
-        tol: tolerance
-        so far, logitudinally, only for fixed energy
+        get linear matrix starting from index i0 to i1
         '''
-        isconvergent = False
-        x1all = None
-        x0 = np.zeros(6)
-        x0[5] = fixedenergy
-        for i in range(niter):
-            x1all = self.eletrack(x0,sym4=sym4)
-            x1 = x1all[-1][:,0]
-            if abs(x0[0]-x1[0])<=tol[0] and \
-               abs(x0[1]-x1[1])<=tol[1] and \
-               abs(x0[2]-x1[2])<=tol[2] and \
-               abs(x0[3]-x1[3])<=tol[3]:
-                isconvergent = True
-                break
-            else:
-                x0 = (x0+x1)/2
-                x0[4] = 0.
-                #print(4*'%15.6f'%tuple(x0[:4]))
-        if isconvergent:
-            xco = x1all[:,0,:][:,0]
-            xpco = x1all[:,1,:][:,0]
-            yco = x1all[:,2,:][:,0]
-            ypco = x1all[:,3,:][:,0]
-
-            if verbose:
-                print('closed orbit found after %i iterations'%(i+1))
-            return xco,xpco,yco,ypco,isconvergent,x1all[-1,4,0]
+        if startIndex and startIndex>=0:
+            sb = startIndex
         else:
-            xco = x1all[:,0,:][:,0]
-            yco = x1all[:,2,:][:,0]
-            if verbose:
-                print('max. iteration (%i) reached, no closed orbit found'%niter)
-            return xco,yco,isconvergent,x1all[-1,4,0]
-
-
-    def getDispersionWithTracking(self,De=np.linspace(-0.025,0.025,6),deg=4,
-                                  verbose=False,figsize=(20,16)):
-        '''
-        get higher order dispersion and momentum compactor using
-        symplectic tracking
-        hodisp: higher order dispersion
-        hoalpha: higher order momentom compactor
-        '''
-        Xco,Yco,C,Dl = [],[],[],[]
-        for i,de in enumerate(De):
-            if verbose:
-                sys.stdout.write('\r %03i out of %03i: dE = %9.4f'
-                                 %(i+1,len(De),de))
-                sys.stdout.flush()
-            xco,yco,c,dl = self.findClosedOrbit(fixedenergy=de,
-                                                sym4=True,niter=100)
-            Xco.append(xco)
-            Yco.append(yco)
-            C.append(c)
-            Dl.append(dl)
-
-        co123 = np.array(Xco)
-        disp = np.polyfit(De, co123,deg=deg)
-        if verbose:
-            plt.figure(figsize=figsize)
-            for i,order in enumerate(range(-2,-deg-1,-1)):
-                plt.subplot(deg-1,1,i+1)
-                plt.plot(self.s,disp[order],'b',linewidth=2,
-                         label=r'$\eta_{'+str(i+1)+'}$')
-                if i == 0:
-                    plt.plot(self.s,self.etax,'ko',label='Linear theory')
-                plt.xlabel('s (m)')
-                plt.ylabel(r'$\eta_x (m)$')
-                plt.legend(loc='best')
-            plt.show()
-        alpha = np.polyfit(De,Dl,deg=deg)
-        self.hodisp = disp
-        self.hoalpha = alpha/self.L
+            sb = 0
+        if endIndex and endIndex<=len(self.bl):
+            se = endIndex
+        else:
+            se = len(self.bl)
+        if se > sb:
+            tmlist = [e.tm for e in self.bl[sb:se]][::-1]
+            R = reduce(np.dot,tmlist)
+        elif se < sb:
+            tmlist1 = [e.tm for e in self.bl[sb:]]
+            tmlist2 = [e.tm for e in self.bl[:se]]
+            tmlist = tmlist1+tmlist2
+            R = reduce(np.dot,tmlist[::-1])
+        else:
+            R = np.eye(6)
+        return R
 
     def cmbdrf(self):
         '''
@@ -1986,34 +2163,14 @@ class beamline():
             if ele.__class__.__name__ != 'drif':
                 newline.append(ele)
             else:
-                if not newline or newline[-1].__class__.__name__ != 'drif':
+                if not newline or newline[-1].__class__.__name__!='drif':
                     drfidx += 1
-                    dftname = 'D'+string.zfill(drfidx,4)
+                    dftname = 'd%04i'%drfidx
                     d = drif(dftname,L=ele.L)
                     newline.append(d)
                 else:
-                    newline[-1].put('L',newline[-1].L+ele.L)
+                    newline[-1].L = newline[-1].L+ele.L
         return newline
-
-    def getTransMat(self,i0,i1):
-        '''
-        get linear matrix starting from index i0 to i1
-        '''
-        n = len(self.bl)
-        if any([i0<0,i1<0,i0>n,i1>n]):
-            raise RuntimeError('index must be within [0-%i]'%(n-1))
-        R = np.mat(np.eye(6))
-        if i1 > i0:
-            for elem in self.bl[i0:i1]:
-                R = elem.tm*R
-        elif i1 < i0:
-            for elem in self.bl[i0:]:
-                R = elem.tm*R
-            for elem in self.bl[:i1]:
-                R = elem.tm*R
-        else:
-            pass
-        return R
 
 
 class cell(beamline):
@@ -2154,6 +2311,88 @@ class cell(beamline):
         s += '\n\n'
         return s
 
+
+    def findClosedOrbit(self, niter=50,fixedenergy=0.0,
+                        tol=[1e-6,1e-7,1e-6,1e-7,1e-6,1e-6],
+                        sym4=True,verbose=False):
+        '''
+        find closed orbit by iteration
+        niter: number of iterations
+        tol: tolerance
+        so far, logitudinally, only for fixed energy
+        '''
+        isconvergent = False
+        x1all = None
+        x0 = np.zeros(6)
+        x0[5] = fixedenergy
+        for i in range(niter):
+            x1all = self.eletrack(x0,sym4=sym4)
+            x1 = x1all[-1][:,0]
+            if abs(x0[0]-x1[0])<=tol[0] and \
+               abs(x0[1]-x1[1])<=tol[1] and \
+               abs(x0[2]-x1[2])<=tol[2] and \
+               abs(x0[3]-x1[3])<=tol[3]:
+                isconvergent = True
+                break
+            else:
+                x0 = (x0+x1)/2
+                x0[4] = 0.
+                #print(4*'%15.6f'%tuple(x0[:4]))
+        if isconvergent:
+            xco = x1all[:,0,:][:,0]
+            xpco = x1all[:,1,:][:,0]
+            yco = x1all[:,2,:][:,0]
+            ypco = x1all[:,3,:][:,0]
+
+            if verbose:
+                print('closed orbit found after %i iterations'%(i+1))
+            return xco,xpco,yco,ypco,isconvergent,x1all[-1,4,0]
+        else:
+            xco = x1all[:,0,:][:,0]
+            yco = x1all[:,2,:][:,0]
+            if verbose:
+                print('max. iteration (%i) reached, no closed orbit found'%niter)
+            return xco,yco,isconvergent,x1all[-1,4,0]
+
+
+    def getDispersionWithTracking(self,De=np.linspace(-0.025,0.025,6),deg=4,
+                                  verbose=False,figsize=(20,16)):
+        '''
+        get higher order dispersion and momentum compactor using
+        symplectic tracking
+        hodisp: higher order dispersion
+        hoalpha: higher order momentom compactor
+        '''
+        Xco,Yco,C,Dl = [],[],[],[]
+        for i,de in enumerate(De):
+            if verbose:
+                sys.stdout.write('\r %03i out of %03i: dE = %9.4f'
+                                 %(i+1,len(De),de))
+                sys.stdout.flush()
+            xco,yco,c,dl = self.findClosedOrbit(fixedenergy=de,
+                                                sym4=True,niter=100)
+            Xco.append(xco)
+            Yco.append(yco)
+            C.append(c)
+            Dl.append(dl)
+
+        co123 = np.array(Xco)
+        disp = np.polyfit(De, co123,deg=deg)
+        if verbose:
+            plt.figure(figsize=figsize)
+            for i,order in enumerate(range(-2,-deg-1,-1)):
+                plt.subplot(deg-1,1,i+1)
+                plt.plot(self.s,disp[order],'b',linewidth=2,
+                         label=r'$\eta_{'+str(i+1)+'}$')
+                if i == 0:
+                    plt.plot(self.s,self.etax,'ko',label='Linear theory')
+                plt.xlabel('s (m)')
+                plt.ylabel(r'$\eta_x (m)$')
+                plt.legend(loc='best')
+            plt.show()
+        alpha = np.polyfit(De,Dl,deg=deg)
+        self.hodisp = disp
+        self.hoalpha = alpha/self.L
 
     def coupledTwiss(self):
         '''
