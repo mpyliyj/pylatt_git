@@ -2598,22 +2598,22 @@ class cell(beamline):
         self.nu_I,self.nu_II = np.arctan2(l0[0].imag,l0[0].real)/twopi,\
                                np.arctan2(l0[2].imag,l0[2].real)/twopi
         bag,bagName = vect2beta(v0)
-        bagx_I,bagy_I,bagx_II,bagy_II = bag[:,0],bag[:,1],bag[:,2],bag[:,3]
+        bagx_I,bagy_I,bagx_II,bagy_II = [bag[:,0]],[bag[:,1]],[bag[:,2]],[bag[:,3]]
         for ele in self.bl:
             v1 = ele.tm[:4,:4].dot(v0)
             t,tn = vect2beta(v1)
-            bagx_I = np.append(bagx_I,t[:,0],axis=1)
-            bagy_I = np.append(bagy_I,t[:,1],axis=1)
-            bagx_II = np.append(bagx_II,t[:,2],axis=1)
-            bagy_II = np.append(bagy_II,t[:,3],axis=1)
+            #print 'append error: ',bagx_I,t[:,0]
+            bagx_I.append(t[:,0])
+            bagy_I.append(t[:,1])
+            bagx_II.append(t[:,2])
+            bagy_II.append(t[:,3])
             v0 = v1
-        self.twx_I,self.twy_I = np.array(bagx_I),np.array(bagy_I),
-        self.twx_II,self.twy_II = np.array(bagx_II),np.array(bagy_II)
+        self.twx_I,self.twy_I = np.array(bagx_I).transpose(),np.array(bagy_I).transpose()
+        self.twx_II,self.twy_II = np.array(bagx_II).transpose(),np.array(bagy_II).transpose()
         self.twx_I[3] = monoPhase(self.twx_I[3])
         self.twy_I[3] = monoPhase(self.twy_I[3])
         self.twx_II[3] = monoPhase(self.twx_II[3])
         self.twy_II[3] = monoPhase(self.twy_II[3])
-
 
     def coupledemit(self):
         '''
@@ -5127,8 +5127,9 @@ def symJ(nvar=4):
     '''
     symplectic J matrix M.T * J * M = J
     '''
-    J = np.matrix(np.zeros((nvar, nvar)))
-    for i in range(int(nvar/2)):
+    #J = np.mat(np.zeros((nvar, nvar)))
+    J = np.zeros((nvar, nvar))
+    for i in xrange(int(nvar/2)):
         J[2*i,2*i+1] = 1.
         J[2*i+1,2*i] = -1.
     return J	 
@@ -5156,7 +5157,7 @@ def vect2beta(v):
      bagname: name explanation for output
     ref: Willeke and Ripken, Methods of beam optics, DESY
     '''
-    v = np.mat(v)
+    v = np.array(v)
     z1 = (v[:,0]+v[:,1])/np.sqrt(2)
     z2 = (v[:,0]-v[:,1])/np.sqrt(2)
     z3 = (v[:,2]+v[:,3])/np.sqrt(2)
@@ -5166,32 +5167,32 @@ def vect2beta(v):
     z3 = z3.real
     z4 = z4.imag
     s = symJ(nvar=4)
-    nm1 = (z1.T*s*z2)[0,0]
-    nm2 = (z3.T*s*z4)[0,0]
-    betax_I = (z1[0,0]**2+z2[0,0]**2)/nm1
-    alfax_I = -(z1[0,0]*z1[1,0]+z2[0,0]*z2[1,0])/nm1    
-    gamax_I = (z1[1,0]**2+z2[1,0]**2)/nm1
-    phx_I = quadrant(z2[0,0],z1[0,0])
-    betay_I = (z1[2,0]**2+z2[2,0]**2)/nm1
-    alfay_I = -(z1[2,0]*z1[3,0]+z2[2,0]*z2[3,0])/nm1
-    gamay_I = (z1[3,0]**2+z2[3,0]**2)/nm1
-    phy_I = quadrant(z2[2,0],z1[2,0])
-    betax_II = (z3[0,0]**2+z4[0,0]**2)/nm2
-    alfax_II = -(z3[0,0]*z3[1,0]+z4[0,0]*z4[1,0])/nm2
-    gamax_II = (z3[1,0]**2+z4[1,0]**2)/nm2
-    phx_II = quadrant(z4[0,0],z3[0,0])
-    betay_II = (z3[2,0]**2+z4[2,0]**2)/nm2
-    alfay_II = -(z3[2,0]*z3[3,0]+z4[2,0]*z4[3,0])/nm2
-    gamay_II = (z3[3,0]**2+z4[3,0]**2)/nm2
-    phy_II = quadrant(z4[2,0],z3[2,0])
+    nm1 = z1.dot(s).dot(z2)
+    nm2 = z3.dot(s).dot(z4)
+    betax_I = (z1[0]**2+z2[0]**2)/nm1
+    alfax_I = -(z1[0]*z1[1]+z2[0]*z2[1])/nm1
+    gamax_I = (z1[1]**2+z2[1]**2)/nm1
+    phx_I = quadrant(z2[0],z1[0])
+    betay_I = (z1[2]**2+z2[2]**2)/nm1
+    alfay_I = -(z1[2]*z1[3]+z2[2]*z2[3])/nm1
+    gamay_I = (z1[3]**2+z2[3]**2)/nm1
+    phy_I = quadrant(z2[2],z1[2])
+    betax_II = (z3[0]**2+z4[0]**2)/nm2
+    alfax_II = -(z3[0]*z3[1]+z4[0]*z4[1])/nm2
+    gamax_II = (z3[1]**2+z4[1]**2)/nm2
+    phx_II = quadrant(z4[0],z3[0])
+    betay_II = (z3[2]**2+z4[2]**2)/nm2
+    alfay_II = -(z3[2]*z3[3]+z4[2]*z4[3])/nm2
+    gamay_II = (z3[3]**2+z4[3]**2)/nm2
+    phy_II = quadrant(z4[2],z3[2])
     bagName =  np.array([['betax_I','alfax_I','gamax_I','phx_I'],
                          ['betay_I','alfay_I','gamay_I','phy_I'],\
                          ['betax_II','alfax_II','gamax_II','phx_II'],\
                          ['betay_II','alfay_II','gamay_II','phy_II']]).T
-    bag =  np.mat([[betax_I,alfax_I,gamax_I,phx_I],
-                   [betay_I,alfay_I,gamay_I,phy_I],\
-                   [betax_II,alfax_II,gamax_II,phx_II],\
-                   [betay_II,alfay_II,gamay_II,phy_II]]).T
+    bag =  np.array([[betax_I,alfax_I,gamax_I,phx_I],
+                     [betay_I,alfay_I,gamay_I,phy_I],\
+                     [betax_II,alfax_II,gamax_II,phx_II],\
+                     [betay_II,alfay_II,gamay_II,phy_II]]).transpose()
     return (bag,bagName)
 
 
