@@ -26,7 +26,7 @@ import mvp
 
 np.seterr(all='ignore')
 
-# --- global parameters: 
+# --- global parameters:
 csp = 299792458.0 # speed of light
 twopi = 2*np.pi
 
@@ -93,7 +93,7 @@ class drif(object):
             self._update()
         except:
             raise RuntimeError('Dy must be float (or convertible)')
- 
+
     @property
     def tilt(self):
         return self._tilt
@@ -344,7 +344,7 @@ class matr(drif):
     @tm.setter
     def tm(self,value):
         try:
-            self._tm = np.array(value).reshape(6,6) 
+            self._tm = np.array(value).reshape(6,6)
             self._update()
         except:
             raise RuntimeError('tm must be 6x6 float (or convertible)')
@@ -590,7 +590,7 @@ class aper(drif):
     class: aper - define a physical aperture with two dimension constraints
     usage: AP01 = aper(name='AP01',L=0,aper=[-0.1,0.1,-0.1,0.1],
                        Dx=0,Dy=0,tilt=0,tag=[])
-    
+
     Parameter list:
     name:         element name
     L:            length
@@ -633,7 +633,7 @@ class aper(drif):
 
     def _selfcheck(self):
         '''
-        check aperture dimension, if OK, no return, otherwise print warning 
+        check aperture dimension, if OK, no return, otherwise print warning
         '''
         if len(self.aper) != 4:
             print('warning: %s\'s aperture dimension is not 4'%self.name)
@@ -644,7 +644,8 @@ class aper(drif):
     '''
     def sympass4(self,x0):
         x = super(aper,self).sympass4(x0)
-        survived = chkap(x,xap=(self.aper[0],self.aper[1]),yap=(self.aper[2],self.aper[3]))
+        survived = chkap(x,xap=(self.aper[0],self.aper[1]),
+                         yap=(self.aper[2],self.aper[3]))
         survived = np.array(survived)[0]
         for i,si in enumerate(survived):
             if not si:
@@ -680,7 +681,7 @@ class octu(drif):
         self._tilt = float(tilt)
         self.tag = tag
         self._update()
-   
+
     def __repr__(self):
         return '%s: %s, L = %g, K3 = %15.8f'%(
             self.name,self.__class__.__name__,self.L,self.K3)
@@ -699,7 +700,7 @@ class octu(drif):
 
     def _update(self):
         '''
-        update transport (M) and Twiss (Nx,y) matrices with current 
+        update transport (M) and Twiss (Nx,y) matrices with current
         element parameters, settings for 4th order symplectic pass
         '''
         super(octu,self)._update()
@@ -778,14 +779,14 @@ class octu(drif):
         #    x[3] -= self.K3/6*(np.multiply(np.multiply(x[2],x[2]),x[2]) - \
         #                         3*np.multiply(x[2],np.multiply(x[0],x[0])))/(1.+x[5])
         #    return x
-    
+
 
 class sext(drif):
     '''
     class: sext - define setupole with length and K2
     usage: SEXT01 = sext(name='SEXT01',L=0.25,K2=1,
                          nkick=4,Dx=0,Dy=0,tilt=0,tag=[])
-    
+
     Parameter list:
     name:         element name
     L:            length
@@ -807,7 +808,7 @@ class sext(drif):
         self._tilt = float(tilt)
         self.tag = []
         self._update()
-   
+
     def __repr__(self):
         return '%s: %s, L = %g, K2 = %15.8f'%(
             self.name,self.__class__.__name__,self.L,self.K2)
@@ -826,7 +827,7 @@ class sext(drif):
 
     def _update(self):
         '''
-        update transport (M) and Twiss (Nx,y) matrices with current 
+        update transport (M) and Twiss (Nx,y) matrices with current
         element parameters, settings for 4th order symplectic pass
         '''
         super(sext,self)._update()
@@ -1003,7 +1004,7 @@ class kmap(drif):
         '''
         calculate transport matrix from kick map files
         first, read kick maps from given kick map files
-        then, if kick map unit is [micro-rad], 
+        then, if kick map unit is [micro-rad],
         it will be un-normailized by beam energy, and reset its unit as [field]
         '''
         tm = np.eye(6)
@@ -1012,16 +1013,16 @@ class kmap(drif):
             x0[m] += dx
             x = self.sympass4(x0)
             tm[:,m] = x/dx
-        tm[4,:4] = 0 
+        tm[4,:4] = 0
         self._tm = tm
         if self.tilt != 0.:
             r1 = rotmat(-self.tilt)
             r0 = rotmat(self.tilt)
             self._tm = r1.dot(self.tm).dot(r0)
-        
+
     def _readkmap(self,fn):
         '''
-        read kick map from "radia" output, and scale the kick strength 
+        read kick map from "radia" output, and scale the kick strength
         with the given length
         return a dict with scaled length and kick strengthes on the
         same grid as the kick map
@@ -1041,7 +1042,7 @@ class kmap(drif):
         ny = int(a[7].strip())
         thetax = np.empty((ny,nx))
         thetay = np.empty((ny,nx))
-        tabx = np.array([float(x) for x in a[10].strip().split() if x != ''])
+        tabx = np.array([float(x) for x in a[10].strip().split() if x!=''])
         taby = np.empty(ny)
         if 'micro-rad' in a[8]:
             unit = 'kick'
@@ -1050,13 +1051,13 @@ class kmap(drif):
         # --- x-plane
         for m in range(11, 11+ny):
             i = m - 11
-            linelist = [float(x) for x in a[m].strip().split() if x != '']
+            linelist = [float(x) for x in a[m].strip().split() if x!='']
             taby[i] = linelist[0]
             thetax[i] = np.array(linelist[1:])
         # --- y-plane
         for m in range(14+ny, 14+2*ny):
             i = m - (14+ny)
-            linelist = [float(x) for x in a[m].strip().split() if x != '']
+            linelist = [float(x) for x in a[m].strip().split() if x!='']
             thetay[i] = np.array(linelist[1:])
         return {'x':tabx, 'y':taby, 'unit':unit,
                 'kx':thetax*self.L/idlen, 'ky':thetay*self.L/idlen}
@@ -1280,7 +1281,8 @@ class bend(drif):
            self._tm[2,3] = self.L
         #entrance
         if self.hgap!=0 and self.fint!=0:
-            vf  = -1/self._R*self.hgap*self.fint*(1+np.sin(self.e1)**2)/np.cos(self.e1)*2
+            vf  = -1/self._R*self.hgap*self.fint * \
+                 (1+np.sin(self.e1)**2)/np.cos(self.e1)*2
         else:
             vf = 0
         if self.e1!=0 or vf!=0:
@@ -1291,7 +1293,8 @@ class bend(drif):
             self._tm = self.tm.dot(m1)
         #exit
         if self.hgap!=0 and self.fint!=0:
-            vf = -1/self._R*self.hgap*self.fint*(1+np.sin(self.e2)**2)/np.cos(self.e2)*2
+            vf = -1/self._R*self.hgap*self.fint * \
+                (1+np.sin(self.e2)**2)/np.cos(self.e2)*2
         else:
             vf = 0
         if self.e1!=0 or vf!=0:
@@ -1307,7 +1310,7 @@ class bend(drif):
 
     def _update(self):
         '''
-        update transport (M) and Twiss (Nx,y) matrices with current 
+        update transport (M) and Twiss (Nx,y) matrices with current
         element parameters, settings for 4th order symplectic pass
         '''
         try:
@@ -1462,7 +1465,7 @@ class beamline(object):
     '''
     class: beamline - define a beamline with a squence of magnets
     usage: beamline(bl,twx0,twy0,dx0,N=1,E=3)
-    
+
     twx0, twy0, dx: Twiss paramters at the starting point
                     3x1 matrix
     '''
@@ -1471,8 +1474,10 @@ class beamline(object):
                  emitx=1000,emity=1000,sige=1e-2,E=3):
         self._bl = [ele for ele in flatten(bl)]
         self._E = float(E)
-        self._betax0,self._alfax0,self._betay0,self._alfay0 = betax0,alfax0,betay0,alfay0
-        self._etax0,self._etaxp0,self._etay0,self._etayp0 = etax0,etaxp0,etay0,etayp0
+        self._betax0,self._alfax0,self._betay0,self._alfay0 = \
+                    betax0,alfax0,betay0,alfay0
+        self._etax0,self._etaxp0,self._etay0,self._etayp0 = \
+                    etax0,etaxp0,etay0,etayp0
         self._emitx = float(emitx)
         self._emity = float(emity)
         self._sige = float(sige)
@@ -1500,7 +1505,7 @@ class beamline(object):
             self._bl = list(value)
             self._update()
         except:
-            raise RuntimeError('bl must be a list of magnet instances (or convertible)')
+            raise RuntimeError('bl must be a list of magnet instances')
 
     @property
     def betax0(self):
@@ -1807,8 +1812,8 @@ class beamline(object):
         if unique:
             return list(set(ele))
         else:
-            return ele 
-        
+            return ele
+
     def getSIndex(self,s0):
         '''
         get the s index where s0 is in-between
@@ -1825,7 +1830,7 @@ class beamline(object):
     def getIndex(self,types,prefix='',suffix='',include='',
                  exclude=''):
         '''
-        get all element index with the given types and 
+        get all element index with the given types and
         starts/ends with the specified string
         types:    str/list-like, element types
         prefix:   str, which is the string element name starts with
@@ -1930,7 +1935,7 @@ class beamline(object):
         plot transverse beam size along s
         parameters: save:      bool, if true, save the plot into the file
                                with the given name as 'fn = xxx.xxx'
-                    fn:        str,  specify the file name if save is true 
+                    fn:        str,  specify the file name if save is true
                     srange:    float/list, a list with two elements to define
                                [s-begin, s-end], whole beam-line by default
         '''
@@ -2313,19 +2318,19 @@ class cell(beamline):
         else:
             if verbose:
                 print('\n === Warning: no stable linear optics === \n')
-            self.rmattr(['U0', 'sige', 'emitx', 'nux', 'nuy', 'chy', 
-                         'muy', 'gamay', 'gamax', 'etaxp', 'sigy', 
-                         'sigx', 'chy0', 'chx0', 'Jy', 
-                         'etax', 'mux', 'I', 'tau0', 'chx', 'Je', 
+            self.rmattr(['U0', 'sige', 'emitx', 'nux', 'nuy', 'chy',
+                         'muy', 'gamay', 'gamax', 'etaxp', 'sigy',
+                         'sigx', 'chy0', 'chx0', 'Jy',
+                         'etax', 'mux', 'I', 'tau0', 'chx', 'Je',
                          'twx', 'twy', 'D', 'nus',
-                         'dx', 'emity', 'Jx', 'taue', 'alphac', 
-                         'taux', 'tauy', 'alfay', 'alfax', 
+                         'dx', 'emity', 'Jx', 'taue', 'alphac',
+                         'taux', 'tauy', 'alfay', 'alfax',
                          'betay', 'betax'])
 
 
     def _period(self):
         '''
-        Determines the twiss functions and dispersion 
+        Determines the twiss functions and dispersion
         at a single location of a ring
         wx = matrix([[betax],[alfax],[gamax]])
         wy = np.mat([[betay],[alfay],[gamay]])
@@ -2356,7 +2361,7 @@ class cell(beamline):
 
     def __repr__(self):
         '''
-        List some main parameters 
+        List some main parameters
         '''
         s = ''
         s += '\n'+'-'*11*11+'\n'
@@ -2477,12 +2482,12 @@ class cell(beamline):
         self._taux = self.tau0/self.Jx
         self._tauy = self.tau0
         self._taue = self.tau0/self.Je
-        self._sige = np.sqrt(const*lam*grel**2*self.I[2]/(2.*self.I[1]+self.I[3])) 
+        self._sige = np.sqrt(const*lam*grel**2*self.I[2]/(2.*self.I[1]+self.I[3]))
         self._emitx = const*lam*grel**2*(self.I[4]/(self.I[1]-self.I[3]))*1e9 #nm
         self._emity = self.emitx*self.kcouple/(1+self.kcouple) #nm
-        self._sigx =[np.sqrt(self.betax[m]*self.emitx*1e-9) + 
+        self._sigx =[np.sqrt(self.betax[m]*self.emitx*1e-9) +
                      abs(self.etax[m])*self.sige for m in range(len(self.s))]
-        self._sigy =[np.sqrt(self.betay[m]*self.emity*1e-9) 
+        self._sigy =[np.sqrt(self.betay[m]*self.emity*1e-9)
                      for m in range(len(self.s))]
         if includeWig:
             # --- S.Y. Lee's book formulae
@@ -2588,7 +2593,7 @@ class cell(beamline):
         self.hodisp = disp
         self.hoalpha = alpha/self.L
 
-    # --- linear coupling 
+    # --- linear coupling
     def coupledTwiss(self):
         '''
         calculated Twiss functions (four Betas)  with linear coupling
@@ -2840,7 +2845,7 @@ class cell(beamline):
         if not ho:
             H = 1./2*self.h*self.revfreq*self.alphac*dE**2 + \
             self.revfreq*self.Vrf/(2*np.pi*self.E*1e9) * \
-            (np.cos(phi)-np.cos(self.phaserf) + 
+            (np.cos(phi)-np.cos(self.phaserf) +
              (phi-self.phaserf)*np.sin(self.phaserf))
         else:
             if not hasattr(self,'hoalpha'):
@@ -2849,7 +2854,7 @@ class cell(beamline):
                 1./3*self.h*self.revfreq*self.hoalpha[-3]*dE**3 + \
                 1./4*self.h*self.revfreq*self.hoalpha[-4]*dE**4 + \
                 self.revfreq*self.Vrf/(2*np.pi*self.E*1e9) * \
-                (np.cos(phi)-np.cos(self.phaserf) + 
+                (np.cos(phi)-np.cos(self.phaserf) +
                  (phi-self.phaserf)*np.sin(self.phaserf))
         return H
 
@@ -2947,7 +2952,7 @@ class cell(beamline):
     def cchrom(self,var,ch=[0,0],minSextValue=False):
         '''
         use specified sexts to correct chromaticity
-        if minSextValue is True, try to minimize the 
+        if minSextValue is True, try to minimize the
         sum of absolute sextupole strengthes
         '''
         sexts = [[v,'K2'] for v in var]
@@ -2968,22 +2973,22 @@ class cell(beamline):
     def cchrom1(self,var,ch=[0,0]):
         '''
         use specified sexts to correct chromaticity
-        if minSextValue is True, try to minimize the 
+        if minSextValue is True, try to minimize the
         sum of absolute sextupole strengthes
         '''
         if not hasattr(self,'chrm'):
             self.getChrm(self,var)
         self.chrom()
-        dk = np.linalg.lstsq(self.chrm, 
+        dk = np.linalg.lstsq(self.chrm,
                              np.array(ch)-np.array([self.chx,self.chy]))[0]
         for i,v in enumerate(var):
             v.put('K2',v.K2+dk[i])
         self.chrom()
-                     
+
 
     def simuTbt(self,bpmIndex=[],nturns=1050,x0=[1.e-3,0,0,0,0,0],verbose=0):
         '''
-        simulate TbT 
+        simulate TbT
         '''
         if not len(bpmIndex):
             bpmIndex = ring.getIndex('moni')
@@ -3079,7 +3084,7 @@ class cell(beamline):
         for i,mag in enumerate(mags):
             if mag.__class__.__name__ == 'quad':
                 pl = [1]
-                bn = mag.K1 
+                bn = mag.K1
             else: # --- sext
                 pl = [2]
                 bn = mag.K2/2
@@ -3113,8 +3118,8 @@ class cell(beamline):
             if ei[0] == 2:
                 Li,bni,bxi,byi,dxi,muxi,muyi = ei[1],ei[2],ei[3],ei[4],ei[5],ei[6],ei[7]
                 K2Li = Li*bni
-                h11001 -= 2*K2Li*dxi*bxi 
-                h00111 += 2*K2Li*dxi*byi 
+                h11001 -= 2*K2Li*dxi*bxi
+                h00111 += 2*K2Li*dxi*byi
                 h20001 -= 2*K2Li*dxi*bxi*np.exp(2j*muxi)
                 h00201 += 2*K2Li*dxi*byi*np.exp(2j*muyi)
                 h10002 -= K2Li*dxi**2*np.sqrt(bxi)*np.exp(1j*muxi)
@@ -3124,7 +3129,7 @@ class cell(beamline):
                 h10110 += K2Li*np.sqrt(bxi)*byi*np.exp(1j*muxi)
                 h10020 += K2Li*np.sqrt(bxi)*byi*np.exp(1j*(muxi-2*muyi))
                 h10200 += K2Li*np.sqrt(bxi)*byi*np.exp(1j*(muxi+2*muyi))
-                
+
             if ei[0] == 1:
                 Li,bni,bxi,byi,dxi,muxi,muyi = ei[1],ei[2],ei[3],ei[4],ei[5],ei[6],ei[7]
                 K1Li = Li*bni
@@ -3218,7 +3223,7 @@ class cell(beamline):
                 h = complex(0,0)
             if kwargs.get('h',0):
                 h = complex(0,0)
-                
+
         for i,ei in enumerate(self.h12table):
             if ei[0] == 2:
                 Li,bni,bxi,byi,dxi,muxi,muyi = ei[1],ei[2],ei[3],ei[4],ei[5],ei[6],ei[7]
@@ -3295,7 +3300,7 @@ class cell(beamline):
                                 if 'h20020' in locals(): h20020 += d20020
                                 if 'h20110' in locals(): h20110 += d20110
                                 if 'h20200' in locals(): h20200 += d20200
-                                if 'h00220' in locals(): h00220 += d00220 
+                                if 'h00220' in locals(): h00220 += d00220
                                 if 'h00310' in locals(): h00310 += d00310
                                 if 'h00400' in locals(): h00400 += d00400
                                 if 'h21001' in locals(): h21001 += d21001
@@ -3319,7 +3324,7 @@ class cell(beamline):
                                 if 'h20020' in locals(): h20020 -= d20020
                                 if 'h20110' in locals(): h20110 -= d20110
                                 if 'h20200' in locals(): h20200 -= d20200
-                                if 'h00220' in locals(): h00220 -= d00220 
+                                if 'h00220' in locals(): h00220 -= d00220
                                 if 'h00310' in locals(): h00310 -= d00310
                                 if 'h00400' in locals(): h00400 -= d00400
                                 if 'h21001' in locals(): h21001 -= d21001
@@ -3381,7 +3386,7 @@ class cell(beamline):
                             if 'h00202' in locals(): h00202 += d00202
                             if 'h10003' in locals(): h10003 += d10003
                             if 'h00004' in locals(): h00004 += d00004
-                                      
+
                         elif j < i:
                             if 'h21001' in locals(): h21001 -= d21001
                             if 'h30001' in locals(): h30001 -= d30001
@@ -3394,7 +3399,7 @@ class cell(beamline):
                             if 'h00202' in locals(): h00202 -= d00202
                             if 'h10003' in locals(): h10003 -= d10003
                             if 'h00004' in locals(): h00004 -= d00004
-                        
+
             if ei[0] == 1:
                 Li,bni,bxi,byi,dxi,muxi,muyi = ei[1],ei[2],ei[3],ei[4],ei[5],ei[6],ei[7]
                 K1Li = Li*bni
@@ -3472,7 +3477,7 @@ class cell(beamline):
         if 'h00202' in locals(): h2list.append(('h00202',h00202     ))
         if 'h10003' in locals(): h2list.append(('h10003',h10003     ))
         if 'h00004' in locals(): h2list.append(('h00004',h00004     ))
-        
+
         self.h2 = dict(h2list)
 
     def geth1_old(self):
@@ -3498,8 +3503,8 @@ class cell(beamline):
                 bxi,byi,dxi,muxi,muyi = self.twmid(i)
                 K2Li = ei.K2*ei.L/2
                 #print K2Li,bxi,byi,dxi,muxi,muyi
-                h11001 -= 2*K2Li*dxi*bxi 
-                h00111 += 2*K2Li*dxi*byi 
+                h11001 -= 2*K2Li*dxi*bxi
+                h00111 += 2*K2Li*dxi*byi
                 h20001 -= 2*K2Li*dxi*bxi*np.exp(2j*muxi)
                 h00201 += 2*K2Li*dxi*byi*np.exp(2j*muyi)
                 h10002 -= K2Li*dxi**2*np.sqrt(bxi)*np.exp(1j*muxi)
@@ -3509,7 +3514,7 @@ class cell(beamline):
                 h10110 += K2Li*np.sqrt(bxi)*byi*np.exp(1j*muxi)
                 h10020 += K2Li*np.sqrt(bxi)*byi*np.exp(1j*(muxi-2*muyi))
                 h10200 += K2Li*np.sqrt(bxi)*byi*np.exp(1j*(muxi+2*muyi))
-                
+
             if ei.__class__.__name__ == 'quad':
                 bxi,byi,dxi,muxi,muyi = self.twmid(i)
                 K1Li = ei.K1*ei.L
@@ -3586,7 +3591,7 @@ class cell(beamline):
         h00202 = complex(0,0)
         h10003 = complex(0,0)
         h00004 = complex(0,0)
-        
+
         for i,ei in enumerate(self.bl):
             if ei.__class__.__name__ == 'sext':
                 bxi,byi,dxi,muxi,muyi = self.twmid(i)
@@ -3654,7 +3659,7 @@ class cell(beamline):
                             d10003 = 1j/4*K2Li*K2Lj*np.sqrt(bxi)*bxj*dxi**2*dxj*(np.exp(1j*muxi)-\
                                                                                  np.exp(-1j*(muxi-2*muxj)))
                             d00004 = 1j/4*K2Li*K2Lj*np.sqrt(bxi*bxj)*dxi**2*dxj**2*np.exp(1j*(muxi-muxj))
-                            
+
                             if j > i:
                                 h22000 += d22000
                                 h31000 += d31000
@@ -3664,7 +3669,7 @@ class cell(beamline):
                                 h20020 += d20020
                                 h20110 += d20110
                                 h20200 += d20200
-                                h00220 += d00220 
+                                h00220 += d00220
                                 h00310 += d00310
                                 h00400 += d00400
                                 h21001 += d21001
@@ -3688,7 +3693,7 @@ class cell(beamline):
                                 h20020 -= d20020
                                 h20110 -= d20110
                                 h20200 -= d20200
-                                h00220 -= d00220 
+                                h00220 -= d00220
                                 h00310 -= d00310
                                 h00400 -= d00400
                                 h21001 -= d21001
@@ -3763,7 +3768,7 @@ class cell(beamline):
                             h00202 -= d00202
                             h10003 -= d10003
                             h00004 -= d00004
-                        
+
             if ei.__class__.__name__ == 'quad':
                 bxi,byi,dxi,muxi,muyi = self.twmid(i)
                 K1Li = ei.K1*ei.L
@@ -3868,7 +3873,7 @@ class cell(beamline):
                 rm[ib,ic+ncor] = rme[0]
                 rm[nbpm+ib,ic+ncor] = rme[2]
                 sys.stdout.flush()
-                sys.stdout.write('\rV: cor index: %04i, bpm index: %04i' 
+                sys.stdout.write('\rV: cor index: %04i, bpm index: %04i'
                                  %(ic+1,ib+1))
         self.coupleorm = rm
 
@@ -3899,12 +3904,12 @@ class cell(beamline):
         ormx /= 2*np.sin(np.pi*self.nux)
         ormy /= 2*np.sin(np.pi*self.nuy)
         self.ormx,self.ormy = ormx,ormy
- 
+
 
     def getRespMat(self,bpms=None,quads=None,dk=0.001,
                    verbose=False):
         '''
-        get response matrices for 
+        get response matrices for
         1. phase advance (parm)
         2. tune (tunerm)
         3. horizontal dispersion (disprm)
@@ -4539,7 +4544,7 @@ class cell(beamline):
             replacement = drif(ie.name,L=ie.L)
             self.bl[ii] = replacement
         self.update()
-        
+
 
 def svdcor(x,rm,rcond=1e-6):
     '''
@@ -4547,10 +4552,10 @@ def svdcor(x,rm,rcond=1e-6):
     usage: svd(x,rm, rcond=0.01)
 
     parameters:
-    x: observed error consequence needs to be corrected, 
+    x: observed error consequence needs to be corrected,
        like closed orbit distortion, beta-beat, etc
     rm: response matrix between observed signals and correctors
-    rcond: drop small singual values off by comparing 
+    rcond: drop small singual values off by comparing
            with the largest one (0th)
            if si/s0 < rcond, don't use it for correction
     returns:
@@ -4574,15 +4579,15 @@ def micado(x,rm,n=1,verbose=False):
     usage: micado(x,rm, n=1)
 
     parameters:
-    x:       observed error consequence needs to be corrected, 
+    x:       observed error consequence needs to be corrected,
              like closed orbit distortion, beta-beat, etc
     rm:      response matrix between observed signals and correctors
     n:       number of iterations
-    verbose: if true, print out details 
+    verbose: if true, print out details
 
     returns:
     dk: needed corrector strength
-    xr: expectation after corrector 
+    xr: expectation after corrector
     '''
     k,c,xr = [],[],[]
     if verbose:
@@ -4607,7 +4612,7 @@ def micado(x,rm,n=1,verbose=False):
         if verbose:
             print('%9d%9d%9.3f%9.3f'%(n,ki,a[ki],xressum[ki]))
     dk = np.zeros(rm.shape[1])
-    # --- sum over 
+    # --- sum over
     for i,ki in enumerate(k):
         dk[ki] -= c[i]
     return dk,x
@@ -4736,7 +4741,7 @@ def matrix2twiss(R,plane='x'):
     alfa = (r[0,0]-r[1,1])/(2*s)
     gama = -r[1,0]/s
     return mu,beta,alfa,gama
-    
+
 
 def matrix2disp(R):
     '''
@@ -4800,7 +4805,7 @@ def txt2latt(fn,verbose=False):
 
 def mad2py(fin, fout, upper=True):
     '''
-    read simple/plain MAD8-like (include ELEGANT) lattice input 
+    read simple/plain MAD8-like (include ELEGANT) lattice input
     format into python
 
     fin:  input file name (mad or elegant)
@@ -5011,10 +5016,10 @@ def interp2d(x, y, z, xp, yp):
     x, y:    1-D array
     z:       2-D array must have a size of y row and x col
     xp, yp:  point to interpolate
-    
+
     ----------  x  ---------
     |
-    y        z array 
+    y        z array
     |
     '''
     if x[-1] < x[0]:
@@ -5057,7 +5062,7 @@ def optm(beamline,var,con,wgh,xt=1.e-8,ft=1.e-8,
     parameters optimization for beamline/cell structure
     beamline: beamline or cell/ring
     var: varible nested list, var[m][0] MUST be an instance
-         var=[[q1,'K1'],[q1,'K1']], q1 & q2's K1 are vraible 
+         var=[[q1,'K1'],[q1,'K1']], q1 & q2's K1 are vraible
     con: constraint list. con[m][0] must be an attribute of beamline
          con=[['betax',0,10.0], ['emitx',5.0]], want betax to be 10m
          at beamline.s[0], and emitx 5.0nm.rad
@@ -5091,7 +5096,7 @@ def gfun(val,beamline,var,con,wgh):
     val: variable value list for optimization
     beamline: beamline or cell/ring
     var: varible nested list, var[m][0] MUST be an instance
-         var=[[q1,'K1'],[q1,'K1']], q1 & q2's K1 are vraible 
+         var=[[q1,'K1'],[q1,'K1']], q1 & q2's K1 are vraible
     con: constraint list. con[m][0] must be an attribute of beamline
          con=[['betax',0,10.0], ['emitx',5.0]], want betax to be 10m
          at beamline.s[0], and emitx 5.0nm.rad
@@ -5132,7 +5137,7 @@ def symJ(nvar=4):
     for i in xrange(int(nvar/2)):
         J[2*i,2*i+1] = 1.
         J[2*i+1,2*i] = -1.
-    return J	 
+    return J
 
 
 def quadrant(sn,cn):
@@ -5225,7 +5230,7 @@ def tm2f2(tm,epslon=1e-6):
     for i in range(nd):
         xc.append(mvp.mvp(xi[i:i+1],xv[i:i+1]))
     cm = np.real(cm)
-    f2 = xc[0].const(0) 
+    f2 = xc[0].const(0)
     for i in range(nd):
         for j in range(nd):
             cmv = f2.const(cm[i,j])
@@ -5257,7 +5262,7 @@ def f22tm(f2,truncate=9):
 
 def f22tm_1(f2):
     '''
-    Hamilton-Cayley, see A. Chao's lecture 9, page 21 
+    Hamilton-Cayley, see A. Chao's lecture 9, page 21
     '''
     n = f2.index.shape[1]
     F = np.zeros((4,4))
@@ -5521,10 +5526,10 @@ def coefb0(bL,betax,phix,mux):
     for i in range(ns) for j in range(ns) if i>j ] \
     )\
     /8./(-1+np.exp(1j*mux))**2/(1+np.exp(1j*mux))
-    
+
     b03z322=sum( [-bL[i]**2*betax[i]**3*np.exp(2j*phix[i])for i in range(ns) ]) \
     /8./(-1+np.exp(1j*mux))**2
-    
+
     b03z3=b03z312+b03z322
 
     #term ~ hxm^3 in 3rd order terms of b0
@@ -5567,7 +5572,7 @@ def coefb0(bL,betax,phix,mux):
     #term ~ hxm*hxp in 2rd order terms of b0
     b02zsz=-1j*sum( [bL[i]*np.sqrt(betax[i]**3)*np.exp(1j*mux-1j*phix[i]) for i in range(ns)  ])\
     /2./(1-np.exp(1j*mux))
-    
+
     return b02z2,b02zs2,b02zsz,b03z3,b03zs3,b03zs2z
 
 def b0z(xbar,pbar,b02z2,b02zs2,b02zsz,b03z3,b03zs3,b03zs2z):
