@@ -34,29 +34,29 @@ twopi = 2*np.pi
 class drif(object):
     '''
     class: drif - define a drift space with given name and length
-    usage: D01 = drif(name='D01',L=1.0,nkick=0,Dx=0,Dy=0,Dphi=0,tag=[])
+    usage: D01 = drif(name='D01',L=1.0,nkick=0,Dx=0,Dy=0,tilt=0,tag=[])
 
     Parameter list:
     name:         element name
     L:            length
-    Dx, Dy, Dphi: misalignment in meter, radian
+    Dx, Dy, tilt: misalignment in meter, radian
     tm:           transport matrix 6x6
     tx,ty:        twiss matrics 3x3 for x and y plane
     nkick:        number of kicks, reserved for inherited classes
     tag:          tag list for searching
     '''
-    def __init__(self,name='D01',L=1.0,nkick=0,Dx=0,Dy=0,Dphi=0,tag=[]):
+    def __init__(self,name='D01',L=1.0,nkick=0,Dx=0,Dy=0,tilt=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._Dx = float(Dx)
         self._Dy = float(Dy)
-        self._Dphi = float(Dphi)
+        self._tilt = float(tilt)
         self._nkick = int(nkick)
         self.tag = tag
         self._update()
 
     def __repr__(self):
-        return '%s: %s, L=%g'%(self.name,self.__class__.__name__,self.L)
+        return '%s: %s,L=%g'%(self.name,self.__class__.__name__,self.L)
 
     @property
     def L(self):
@@ -78,6 +78,7 @@ class drif(object):
     def Dx(self,value):
         try:
             self._Dx = float(value)
+            self._update()
         except:
             raise RuntimeError('Dx must be float (or convertible)')
 
@@ -89,19 +90,21 @@ class drif(object):
     def Dy(self,value):
         try:
             self._Dy = float(value)
+            self._update()
         except:
             raise RuntimeError('Dy must be float (or convertible)')
  
     @property
-    def Dphi(self):
-        return self._Dphi
+    def tilt(self):
+        return self._tilt
 
-    @Dphi.setter
-    def Dphi(self,value):
+    @tilt.setter
+    def tilt(self,value):
         try:
-            self._Dphi = float(value)
+            self._tilt = float(value)
+            self._update()
         except:
-            raise RuntimeError('Dphi must be float (or convertible)')
+            raise RuntimeError('tilt must be float (or convertible)')
 
     @property
     def nkick(self):
@@ -180,26 +183,26 @@ class quad(drif):
     name:         element name
     L:            length
     K1:           normalized K1 as the MAD convention
-    Dx, Dy, Dphi: misalignment in meter, radian
+    Dx, Dy, tilt: misalignment in meter, radian
     tm:           transport matrix 6x6
     tx,ty:        twiss matrics 3x3 for x and y plane
     nkick:        number of kicks
     tag:          tag list for searching
     '''
-    def __init__(self,name='Q01',L=0.25,K1=1,nkick=4,Dx=0,Dy=0,Dphi=0,tag=[]):
+    def __init__(self,name='Q01',L=0.25,K1=1,nkick=4,Dx=0,Dy=0,tilt=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._K1 = float(K1)
         self._nkick = int(nkick)
         self._Dx = float(Dx)
         self._Dy = float(Dy)
-        self._Dphi = float(Dphi)
+        self._tilt = float(tilt)
         self.tag = tag
         self._update()
 
     def __repr__(self):
-        return '%s: %s, L=%g, K1=%g'%(
-            self.name,self.__class__.__name__,self.L,self.K1)
+        return '%s: %s,L=%g,K1=%g,tilt=%g'%(
+            self.name,self.__class__.__name__,self.L,self.K1,self.tilt)
 
     @property
     def K1(self):
@@ -232,9 +235,9 @@ class quad(drif):
         else:
             super(quad,self)._transmatrix()
 
-        if self.Dphi != 0.:
-            r1 = rotmat(-self.Dphi)
-            r0 = rotmat(self.Dphi)
+        if self.tilt != 0.:
+            r1 = rotmat(-self.tilt)
+            r0 = rotmat(self.tilt)
             self._tm = r1.dot(self.tm).dot(r0)
 
     def _update(self):
@@ -281,8 +284,8 @@ class quad(drif):
                 x[0] -= self.Dx
             if self.Dy != 0:
                 x[2] -= self.Dy
-            if self.Dphi != 0:
-                x = rotmat(self.Dphi).dot(x)
+            if self.tilt != 0:
+                x = rotmat(self.tilt).dot(x)
             S = 0.
             for i in range(self.nkick):
                 x1p,y1p = x[1],x[3]
@@ -300,8 +303,8 @@ class quad(drif):
                 xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
                 # --- average slope at entrance and exit
                 S += np.sqrt(1.+np.square(xp)+np.square(yp))*self._dL
-            if self.Dphi != 0:
-                x = rotmat(-self.Dphi).dot(x)
+            if self.tilt != 0:
+                x = rotmat(-self.tilt).dot(x)
             if self.Dy != 0:
                 x[2] += self.Dy
             if self.Dx != 0:
@@ -313,24 +316,24 @@ class quad(drif):
 class matr(drif):
     '''
     class matr: define a linear element with its given 6x6 matrix
-    usage: M01 = matr(name='M01',tm=np.eye(6),Dx=0,Dy=0,Dphi=0,tag=[])
+    usage: M01 = matr(name='M01',tm=np.eye(6),Dx=0,Dy=0,tilt=0,tag=[])
 
     Parameter list:
     name:         element name
     L:            length
     K1:           normalized K1 as the MAD convention
-    Dx, Dy, Dphi: misalignment in meter, radian
+    Dx, Dy, tilt: misalignment in meter, radian
     tm:           transport matrix 6x6
     tx,ty:        twiss matrics 3x3 for x and y plane
     tag:          tag list for searching
     '''
-    def __init__(self,name='MAT01',L=0,tm=np.eye(6),Dx=0,Dy=0,Dphi=0,tag=[]):
+    def __init__(self,name='MAT01',L=0,tm=np.eye(6),Dx=0,Dy=0,tilt=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._tm = np.array(tm).reshape(6,6)
         self._Dx = float(Dx)
         self._Dy = float(Dy)
-        self._Dphi = float(Dphi)
+        self._tilt = float(tilt)
         self.tag = tag
         self._update()
 
@@ -352,9 +355,9 @@ class matr(drif):
         '''
         if abs(np.linalg.det(self.tm)-1.) > 1.e-6:
             print('warning: %s\'s linear matrix is not symplectic'%self.name)
-        if self.Dphi != 0.:
-            r1 = rotmat(-self.Dphi)
-            r0 = rotmat(self.Dphi)
+        if self.tilt != 0.:
+            r1 = rotmat(-self.tilt)
+            r0 = rotmat(self.tilt)
             self._tm = r1.dot(self.tm).dot(r0)
 
     def sympass4(self,x,fast=1):
@@ -375,22 +378,22 @@ class matr(drif):
 class moni(drif):
     '''
     class moni: define monitor (BPM) with a default length 0
-    usage: BPM01 = moni(name='BPM01',L=0,Dx=0,Dy=0,Dphi=0,tag=[])
+    usage: BPM01 = moni(name='BPM01',L=0,Dx=0,Dy=0,tilt=0,tag=[])
 
     Parameter list:
     name:         element name
     L:            length
-    Dx, Dy, Dphi: misalignment in meter, radian
+    Dx, Dy, tilt: misalignment in meter, radian
     tm:           transport matrix 6x6
     tx,ty:        twiss matrics 3x3 for x and y plane
     tag:          tag list for searching
     '''
-    def __init__(self,name='BPM01',L=0,Dx=0,Dy=0,Dphi=0,tag=[]):
+    def __init__(self,name='BPM01',L=0,Dx=0,Dy=0,tilt=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._Dx = float(Dx)
         self._Dy = float(Dy)
-        self._Dphi = float(Dphi)
+        self._tilt = float(tilt)
         self._update()
 
 
@@ -402,7 +405,7 @@ class rfca(drif):
     Parameter list:
     name:         element name
     L:            length
-    Dx, Dy, Dphi: misalignment in meter, radian
+    Dx, Dy, tilt: misalignment in meter, radian
     tm:           transport matrix 6x6
     tx,ty:        twiss matrics 3x3 for x and y plane
     tag:          tag list for searching
@@ -411,12 +414,12 @@ class rfca(drif):
     phase:        RF acclerator phase in degree
     '''
     def __init__(self,name='RFC01',L=0,voltage=2e6,
-                 freq=0.5e9,phase=0,Dx=0,Dy=0,Dphi=0,tag=[]):
+                 freq=0.5e9,phase=0,Dx=0,Dy=0,tilt=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._Dx = float(Dx)
         self._Dy = float(Dy)
-        self._Dphi = float(Dphi)
+        self._tilt = float(tilt)
         self._voltage = float(voltage)
         self._freq = float(freq)
         self._phase = float(phase)
@@ -464,20 +467,20 @@ class kick(drif):
     '''
     class kick: define a kick
     usage: K01 = kick(name='K01',L=0,hkick=0,vkick=0,
-                      nkick=1,Dx=0,Dy=0,Dphi=0,tag=[])
+                      nkick=1,Dx=0,Dy=0,tilt=0,tag=[])
 
     Parameter list:
     name:         element name
     L:            length
     hkick:        horizontal kick, radian
     vkick:        vertical kick, radian
-    Dx, Dy, Dphi: misalignment in meter, radian
+    Dx, Dy, tilt: misalignment in meter, radian
     tm:           transport matrix 6x6
     tx,ty:        twiss matrics 3x3 for x and y plane
     tag:          tag list for searching
     '''
     def __init__(self,name='K01',L=0,hkick=0,vkick=0,
-                 nkick=1,Dx=0,Dy=0,Dphi=0,tag=[]):
+                 nkick=1,Dx=0,Dy=0,tilt=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._hkick = float(hkick)
@@ -485,7 +488,7 @@ class kick(drif):
         self._nkick = int(nkick)
         self._Dx = float(Dx)
         self._Dy = float(Dy)
-        self._Dphi = float(Dphi)
+        self._tilt = float(tilt)
         self.tag = tag
         self._update()
 
@@ -554,8 +557,8 @@ class kick(drif):
             x = np.array(x,dtype=float).reshape(6,-1)
         if self.hkick==0 and self.vkick==0:
             return super(moni,self).sympass4(x)
-        if self.Dphi != 0:
-            x = np.dot(rotmat(self.Dphi),x)
+        if self.tilt != 0:
+            x = np.dot(rotmat(self.tilt),x)
         if self.L != 0:
             S = 0
             for i in xrange(self.nkick):
@@ -577,8 +580,8 @@ class kick(drif):
         else:
             x[1] += self.hkick/(1+x[5])
             x[3] += self.vkick/(1+x[5])
-        if self.Dphi != 0:
-            x = np.dot(rotmat(-self.Dphi),x)
+        if self.tilt != 0:
+            x = np.dot(rotmat(-self.tilt),x)
         return x
 
 
@@ -586,13 +589,13 @@ class aper(drif):
     '''
     class: aper - define a physical aperture with two dimension constraints
     usage: AP01 = aper(name='AP01',L=0,aper=[-0.1,0.1,-0.1,0.1],
-                       Dx=0,Dy=0,Dphi=0,tag=[])
+                       Dx=0,Dy=0,tilt=0,tag=[])
     
     Parameter list:
     name:         element name
     L:            length
     aper:         rectangle aperture dimensions
-    Dx, Dy, Dphi: misalignment in meter, radian
+    Dx, Dy, tilt: misalignment in meter, radian
     tm:           transport matrix 6x6
     tx,ty:        twiss matrics 3x3 for x and y plane
     tag:          tag list for searching
@@ -602,13 +605,13 @@ class aper(drif):
     correctness of aperture configuration will be self-checked
     '''
     def __init__(self,name='APER',L=0,aper=[-1.,1.,-1.,1.],
-                 Dx=0,Dy=0,Dphi=0,tag=[]):
+                 Dx=0,Dy=0,tilt=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._aper = np.array(aper,float)
         self._Dx = float(Dx)
         self._Dy = float(Dy)
-        self._Dphi = float(Dphi)
+        self._tilt = float(tilt)
         self.tag = tag
         self._update()
 
@@ -654,27 +657,27 @@ class octu(drif):
     '''
     class: octu - define octupole with K3
     usage: OCT01 = octu(name='OCT01',L=0.1,K3=10,nkick=4,
-                        Dx=0,Dy=0,Dphi=0,tag=[])
+                        Dx=0,Dy=0,tilt=0,tag=[])
 
     Parameter list:
     name:         element name
     L:            length
     K3:           octupole K3 - MAD convention
-    Dx, Dy, Dphi: misalignment in meter, radian
+    Dx, Dy, tilt: misalignment in meter, radian
     tm:           transport matrix 6x6
     tx,ty:        twiss matrics 3x3 for x and y plane
     nkick:        number of kicks, reserved for inherited classes
     tag:          tag list for searching
     '''
     def __init__(self,name='OCT01',L=0,K3=0,nkick=4,
-                 Dx=0,Dy=0,Dphi=0,tag=[]):
+                 Dx=0,Dy=0,tilt=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._K3 = float(K3)
         self._nkick = int(nkick)
         self._Dx = float(Dx)
         self._Dy = float(Dy)
-        self._Dphi = float(Dphi)
+        self._tilt = float(tilt)
         self.tag = tag
         self._update()
    
@@ -738,8 +741,8 @@ class octu(drif):
                 x[0] -= self.Dx
             if self.Dy != 0:
                 x[2] -= self.Dy
-            if self.Dphi != 0:
-                x = np.dot(rotmat(self.Dphi),x)
+            if self.tilt != 0:
+                x = np.dot(rotmat(self.tilt),x)
             S = 0.
             for i in range(self.nkick):
                 x1p,y1p = x[1],x[3]
@@ -762,8 +765,8 @@ class octu(drif):
                 x2p,y2p = x[1],x[3]
                 xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
                 S += np.sqrt(1.+np.square(xp)+np.square(yp))*self._dL
-            if self.Dphi != 0:
-                x = np.dot(rotmat(-self.Dphi),x)
+            if self.tilt != 0:
+                x = np.dot(rotmat(-self.tilt),x)
             if self.Dy != 0:
                 x[2] += self.Dy
             if self.Dx != 0:
@@ -781,27 +784,27 @@ class sext(drif):
     '''
     class: sext - define setupole with length and K2
     usage: SEXT01 = sext(name='SEXT01',L=0.25,K2=1,
-                         nkick=4,Dx=0,Dy=0,Dphi=0,tag=[])
+                         nkick=4,Dx=0,Dy=0,tilt=0,tag=[])
     
     Parameter list:
     name:         element name
     L:            length
     K2:           octupole K2 - MAD convention
-    Dx, Dy, Dphi: misalignment in meter, radian
+    Dx, Dy, tilt: misalignment in meter, radian
     tm:           transport matrix 6x6
     tx,ty:        twiss matrics 3x3 for x and y plane
     nkick:        number of kicks, reserved for inherited classes
     tag:          tag list for searching
     '''
     def __init__(self,name='SEXT01',L=0.25,K2=1,nkick=4,
-                 Dx=0,Dy=0,Dphi=0,tag=[]):
+                 Dx=0,Dy=0,tilt=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._K2 = float(K2)
         self._nkick = int(nkick)
         self._Dx = float(Dx)
         self._Dy = float(Dy)
-        self._Dphi = float(Dphi)
+        self._tilt = float(tilt)
         self.tag = []
         self._update()
    
@@ -865,8 +868,8 @@ class sext(drif):
                 x[0] -= self.Dx
             if self.Dy != 0:
                 x[2] -= self.Dy
-            if self.Dphi != 0:
-                x = np.dot(rotmat(self.Dphi),x)
+            if self.tilt != 0:
+                x = np.dot(rotmat(self.tilt),x)
             S = 0.
             for i in range(self.nkick):
                 x1p,y1p = x[1],x[3]
@@ -886,8 +889,8 @@ class sext(drif):
                 x2p,y2p = x[1],x[3]
                 xp,yp = (x1p+x2p)/2,(y1p+y2p)/2
                 S += np.sqrt(1.+np.square(xp)+np.square(yp))*self._dL
-            if self.Dphi != 0:
-                x = np.dot(rotmat(-self.Dphi),x)
+            if self.tilt != 0:
+                x = np.dot(rotmat(-self.tilt),x)
             if self.Dy != 0:
                 x[2] += self.Dy
             if self.Dx != 0:
@@ -914,7 +917,7 @@ class kmap(drif):
     '''
     def __init__(self,name='ID01', L=0,
                  kmap1fn=None, kmap2fn=None,
-                 E=3,nkick=20,Dx=0,Dy=0,Dphi=0,Bw=1.8):
+                 E=3,nkick=20,Dx=0,Dy=0,tilt=0,Bw=1.8):
         self.name = str(name)
         self._L = float(L)
         self._kmap1fn = kmap1fn
@@ -923,8 +926,25 @@ class kmap(drif):
         self._nkick = int(nkick)
         self._Dx = float(Dx)
         self._Dy = float(Dy)
-        self._Dphi = float(Dphi)
+        self._tilt = float(tilt)
         self._Bw = Bw
+        BRho = self.E*1e9/csp
+        if self.kmap1fn:
+            self._kmap1 = self._readkmap(self.kmap1fn)
+            if self._kmap1['unit'] == 'kick':
+                self._kmap1['kx'] = self._kmap1['kx']*1e-6*BRho
+                self._kmap1['ky'] = self._kmap1['ky']*1e-6*BRho
+                self._kmap1['unit'] = 'field'
+        else:
+            self._kmap1 = None
+        if self.kmap2fn:
+            self._kmap2 = self._readkmap(self.kmap2fn)
+            if self._kmap2['unit'] == 'kick':
+                self._kmap2['kx'] = self._kmap2['kx']*1e-6*BRho*BRho
+                self._kmap2['ky'] = self._kmap2['ky']*1e-6*BRho*BRho
+                self._kmap2['unit'] = 'field'
+        else:
+            self._kmap2 = None
         self._update()
 
     def __repr__(self):
@@ -979,31 +999,25 @@ class kmap(drif):
         except:
             raise RuntimeError('Bw must be float (or convertible)')
 
-    def _transmatrix(self):
+    def _transmatrix(self,dx=1e-4):
         '''
         calculate transport matrix from kick map files
         first, read kick maps from given kick map files
         then, if kick map unit is [micro-rad], 
         it will be un-normailized by beam energy, and reset its unit as [field]
         '''
-        BRho = self.E*1e9/csp
-        if self.kmap1fn:
-            self._kmap1 = self._readkmap(self.kmap1fn)
-            if self._kmap1['unit'] == 'kick':
-                self._kmap1['kx'] = self._kmap1['kx']*1e-6*BRho
-                self._kmap1['ky'] = self._kmap1['ky']*1e-6*BRho
-                self._kmap1['unit'] = 'field'
-        else:
-            self._kmap1 = None
-        if self.kmap2fn:
-            self._kmap2 = self._readkmap(self.kmap2fn)
-            if self._kmap2['unit'] == 'kick':
-                self._kmap2['kx'] = self._kmap2['kx']*1e-6*BRho*BRho
-                self._kmap2['ky'] = self._kmap2['ky']*1e-6*BRho*BRho
-                self._kmap2['unit'] = 'field'
-        else:
-            self._kmap2 = None
-        self._tm = self._kmap2matrix()
+        tm = np.eye(6)
+        for m in range(4):
+            x0 = np.zeros(6)
+            x0[m] += dx
+            x = self.sympass4(x0)
+            tm[:,m] = x/dx
+        tm[4,:4] = 0 
+        self._tm = tm
+        if self.tilt != 0.:
+            r1 = rotmat(-self.tilt)
+            r0 = rotmat(self.tilt)
+            self._tm = r1.dot(self.tm).dot(r0)
         
     def _readkmap(self,fn):
         '''
@@ -1059,8 +1073,8 @@ class kmap(drif):
             x[0] -= self.Dx
         if self.Dy != 0:
             x[2] -= self.Dy
-        if self.Dphi != 0:
-            x = rotmat(self.Dphi).dot(x)
+        if self.tilt != 0:
+            x = rotmat(self.tilt).dot(x)
         S = 0.
         x[0] += x[1]*dl
         x[2] += x[3]*dl
@@ -1085,39 +1099,20 @@ class kmap(drif):
             x[2] += x[3]*dl
             S += np.sqrt(1.+np.square(x[1])+np.square(x[3]))*dl
         x[4] = S-self.L
-        if self.Dphi != 0:
-            x = rotmat(-self.Dphi).dot(x)
+        if self.tilt != 0:
+            x = rotmat(-self.tilt).dot(x)
         if self.Dy != 0:
             x[2] += self.Dy
         if self.Dx != 0:
             x[0] += self.Dx
         return x
 
-    def _kmap2matrix(self,dx=1e-5):
-        '''
-        first order derivative to get a matrix
-        E:           electron nominal energy in GeV
-        kmap:        kickmap dict
-        scale:       kick map scaling factor
-        dx:          small coordinate shift to calculate
-                     derivative (1e-5 by default)
-        kick-map doesn't have info on dispersion
-        '''
-        tm = np.eye(6)
-        for m in range(4):
-            x0 = np.zeros(6)
-            x0[m] += dx
-            x = self.sympass4(x0)
-            tm[:,m] = x/dx
-        tm[4,:4] = 0 
-        return tm
-
 
 class bend(drif):
     '''
     class: bend - define a bend (dipole) with given parmeters
     usage: B01 = bend(name='B01',L=1,angle=0.2,e1=0.1,e2=0.1,K1=0,
-                      K2=0,nkick=10,hgap=0,fint=0.5,Dx=0,Dy=0,Dphi=0,tag=[])
+                      K2=0,nkick=10,hgap=0,fint=0.5,Dx=0,Dy=0,tilt=0,tag=[])
 
     Parameter list:
     name:         element name
@@ -1128,7 +1123,7 @@ class bend(drif):
     nkick:        number of kicks for symplectic tracking
     hgap:         half gap between two poles
     fint:         fringe field integral
-    Dx, Dy, Dphi: misalignment in meter, radian
+    Dx, Dy, tilt: misalignment in meter, radian
     tm:           transport matrix 6x6
     tx,ty:        twiss matrics 3x3 for x and y plane
     tag:          tag list for searching
@@ -1137,7 +1132,7 @@ class bend(drif):
     '''
     def __init__(self,name='B',L=1,angle=1e-9,\
                  e1=0,e2=0,K1=0,K2=0,nkick=10,\
-                 hgap=0,fint=0.5,Dx=0,Dy=0,Dphi=0,tag=[]):
+                 hgap=0,fint=0.5,Dx=0,Dy=0,tilt=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._angle = float(angle)
@@ -1148,7 +1143,7 @@ class bend(drif):
         self._nkick = int(nkick)
         self._Dx = float(Dx)
         self._Dy = float(Dy)
-        self._Dphi = float(Dphi)
+        self._tilt = float(tilt)
         self._hgap = float(hgap)
         self._fint = float(fint)
         self.tag = []
@@ -1305,9 +1300,9 @@ class bend(drif):
             m2[3,2] = -np.tan(self.e2+vf)/self._R
             self._m2 = m2
             self._tm = m2.dot(self.tm)
-        if self.Dphi != 0.:
-            r1 = rotmat(-self.Dphi)
-            r0 = rotmat(self.Dphi)
+        if self.tilt != 0.:
+            r1 = rotmat(-self.tilt)
+            r0 = rotmat(self.tilt)
             self._tm = r1.dot(self.tm).dot(r0)
 
     def _update(self):
@@ -1355,8 +1350,8 @@ class bend(drif):
             x[0] -= self.Dx
         if self.Dy != 0:
             x[2] -= self.Dy
-        if self.Dphi != 0:
-            x = rotmat(self.Dphi)*x
+        if self.tilt != 0:
+            x = rotmat(self.tilt)*x
         if hasattr(self,'_m1'):
             x = self._m1.dot(x)
         for i in range(self.nkick):
@@ -1383,8 +1378,8 @@ class bend(drif):
                              (1+xav/self._R))*self._dL
         if hasattr(self,'_m2'):
             x = self._m2.dot(x)
-        if self.Dphi != 0:
-            x = rotmat(-self.Dphi).dot(x)
+        if self.tilt != 0:
+            x = rotmat(-self.tilt).dot(x)
         if self.Dy != 0:
             x[2] += self.Dy
         if self.Dx != 0:
@@ -1396,12 +1391,12 @@ class bend(drif):
 class wigg(drif):
     '''
     class: wigg - define a simple model for wiggler with given length and field
-    usage: WG01 = wigg(name='WG01',L=1,Bw=1,E=3,Dx=0,Dy=0,Dphi=0,tag=[])
+    usage: WG01 = wigg(name='WG01',L=1,Bw=1,E=3,Dx=0,Dy=0,tilt=0,tag=[])
 
     parameter list:
     name:         element name
     L:            length
-    Dx, Dy, Dphi: misalignment in meter, radian
+    Dx, Dy, tilt: misalignment in meter, radian
     Bw:           average wiggler field strength within one half period
     E:            beam energy in GeV used for normalize field
     tag:          tag list used for searching
@@ -1409,14 +1404,14 @@ class wigg(drif):
     Notice:
     this model basically is only used for radiation calculation
     '''
-    def __init__(self,name='WG01',L=1,Bw=1,E=3,Dx=0,Dy=0,Dphi=0,tag=[]):
+    def __init__(self,name='WG01',L=1,Bw=1,E=3,Dx=0,Dy=0,tilt=0,tag=[]):
         self.name = str(name)
         self._L = float(L)
         self._Bw = float(Bw)
         self._E = float(E)
         self._Dx = float(Dx)
         self._Dy = float(Dy)
-        self._Dphi = float(Dphi)
+        self._tilt = float(tilt)
         self.tag = tag
         self.update()
 
@@ -1457,9 +1452,9 @@ class wigg(drif):
         self._tm[2:4,2:4] = [[np.cos(p),np.sin(p)/k],
                              [-k*np.sin(p),np.cos(p)]]
 
-        if self.Dphi != 0.:
-            r1 = rotmat(-self.Dphi)
-            r0 = rotmat(self.Dphi)
+        if self.tilt != 0.:
+            r1 = rotmat(-self.tilt)
+            r0 = rotmat(self.tilt)
             self._tm = r1.dot(self.tm).dot(r0)
 
 
@@ -1705,15 +1700,6 @@ class beamline(object):
 
     def _update(self):
         self._bl = self.bl
-        self._mux,self._muy = [0.],[0.]
-        self._twx = np.array([self.betax0,self.alfax0
-                              ,(1+self.alfax0*self.alfax0)/self.betax0],
-                             float).reshape(3,1)
-        self._twy = np.array([self.betay0,self.alfay0,
-                              (1+self.alfay0*self.alfay0)/self.betay0],
-                             float).reshape(3,1)
-        self._dxy = np.array([self.etax0,self.etaxp0,self.etay0,self.etayp0,1],
-                             float).reshape(-1,1)
         self._spos()
         self._twiss()
         self._disp()
@@ -1751,6 +1737,15 @@ class beamline(object):
         get twiss parameters along s. twx/y are matrix format,
         betax/y, alfax/y are 1D array, duplicate data are kept for convinence
         '''
+        self._mux,self._muy = [0.],[0.]
+        self._twx = np.array([self.betax0,self.alfax0
+                              ,(1+self.alfax0*self.alfax0)/self.betax0],
+                             float).reshape(3,1)
+        self._twy = np.array([self.betay0,self.alfay0,
+                              (1+self.alfay0*self.alfay0)/self.betay0],
+                             float).reshape(3,1)
+        self._dxy = np.array([self.etax0,self.etaxp0,self.etay0,self.etayp0,1],
+                             float).reshape(-1,1)
         for elem in self.bl:
             mx = elem.tm[0:2,0:2]
             my = elem.tm[2:4,2:4]
@@ -1977,8 +1972,8 @@ class beamline(object):
                 s = '{0} = latt.bend("{1}",L={2},angle={3},e1={4},e2={5},K1={6},K2={7},hgap={8},fint={9})\n' \
                     .format(e.name,e.name,e.L,e.angle,e.e1,e.e2,e.K1,e.K2,e.hgap,e.fint)
             elif e.__class__.__name__ == 'quad':
-                s = '{0} = latt.quad("{1}",L={2},K1={3},Dphi={4})\n'.\
-                    format(e.name,e.name,e.L,e.K1,e.Dphi)
+                s = '{0} = latt.quad("{1}",L={2},K1={3},tilt={4})\n'.\
+                    format(e.name,e.name,e.L,e.K1,e.tilt)
             #elif e.__class__.__name__ == 'sole':
             #    s = '{0} = latt.sole("{1}",L={2},KS={3})\n'.\
             #        format(e.name,e.name,e.L,e.KS)
@@ -2079,9 +2074,7 @@ class beamline(object):
     def getMatLine(self):
         '''
         combine neighboring linear element as matrix list with nonlinear matrix in-between
-
-        alist: a list of matr elements with npnlinear elements in-between
-
+        return: a list of matr elements with nonlinear elements in-between
         If bends with sext or octu integrated, don't use this function
         '''
         alist = []
@@ -2177,22 +2170,121 @@ class cell(beamline):
     '''
     Periodical solution for a beamline
     '''
-    def __init__(self,bl,N=1,E=3.,kcouple=0.01):
+    def __init__(self,bl,E=3.,kcouple=0.01):
         '''
         bl:  an element list to compose a beamline
              each elements must be a pre-defined instances of magnet
-        N:   int, number of period
         E:   float, beam energy in GeV (3 by default)
         kcouple: linear transverse coupling coefficient.
         '''
-        self.E = float(E)
-        self.N = int(N)
-        self.bl = [ele for ele in flatten(bl)]*self.N
-        self.kcouple = kcouple
-        self.update()
+        self._E = float(E)
+        self._bl = [ele for ele in flatten(bl)]
+        self._kcouple = kcouple
+        self._update()
 
-    def update(self,rad=False,chrom=False,ndt=False,synosc=False,
-               extraFun=None,extraArg=None,verbose=True):
+    @property
+    def R(self):
+        return self._R
+
+    @property
+    def isstable(self):
+        return self._isstable
+
+    @property
+    def betax0(self):
+        return self._betax0
+
+    @property
+    def alfax0(self):
+        return self._alfax0
+
+    @property
+    def betay0(self):
+        return self._betay0
+
+    @property
+    def alfay0(self):
+        return self._alfay0
+
+    @property
+    def etax0(self):
+        return self._etax0
+
+    @property
+    def etaxp0(self):
+        return self._etaxp0
+
+    @property
+    def emitx(self):
+        return self._emitx
+
+    @property
+    def emity(self):
+        return self._emity
+
+    @property
+    def sige(self):
+        return self._sige
+
+    @property
+    def I(self):
+        return self._I
+
+    @property
+    def alphac(self):
+        return self._alphac
+
+    @property
+    def U0(self):
+        return self._U0
+
+    @property
+    def D(self):
+        return self._D
+
+    @property
+    def Jx(self):
+        return self._Jx
+
+    @property
+    def Jy(self):
+        return self._Jy
+
+    @property
+    def Je(self):
+        return self._Je
+
+    @property
+    def tau0(self):
+        return self._tau0
+
+    @property
+    def taux(self):
+        return self._taux
+
+    @property
+    def tauy(self):
+        return self._tauy
+
+    @property
+    def taue(self):
+        return self._taue
+
+    @property
+    def kcouple(self):
+
+        return self._kcouple
+
+    @kcouple.setter
+    def kcouple(self,value):
+        try:
+            self._kcouple = float(value)
+            self.rad()
+        except:
+            raise RuntimeError('kcouple must be float (or convertible)')
+
+    def _update(self,rad=False,chrom=False,ndt=False,synosc=False,
+                verbose=True):
         '''
         refresh periodical cell parameters
         rad = True, calculate all radiation related parameters
@@ -2202,12 +2294,11 @@ class cell(beamline):
         extraArg: arguments for the extra function
         verbose: if True, print warning when unstable solution
         '''
-        self.spos()
-        self.period()
+        self._spos()
+        self._period()
         if self.isstable:
-            self.mux,self.muy = [0.],[0.]
-            self.twiss()
-            self.disp()
+            self._twiss()
+            self._disp()
             if rad:
                 self.rad()
                 self.synosc()
@@ -2218,11 +2309,6 @@ class cell(beamline):
                 self.geth2()
             if synosc:
                 self.synosc()
-            if extraFun:
-                try:
-                    self.extraFun(*extraArg)
-                except:
-                    print('undefined extra function %s'%extraFun)
 
         else:
             if verbose:
@@ -2237,7 +2323,7 @@ class cell(beamline):
                          'betay', 'betax'])
 
 
-    def period(self):
+    def _period(self):
         '''
         Determines the twiss functions and dispersion 
         at a single location of a ring
@@ -2249,17 +2335,15 @@ class cell(beamline):
         isstable = True, if bl has a stable optics solution
         otherwise Flase.
         '''
-        tms = [e.tm for e in self.bl][::-1]
-        self.R = reduce(np.dot,tms)
-        if abs(self.R[0,0]+self.R[1,1])>=2 or abs(self.R[2,2]+self.R[3,3])>=2:
-            self.isstable = False
+        self._R = self.getTransMat()
+        if abs(self.R[0,0]+self.R[1,1])>=2 or \
+           abs(self.R[2,2]+self.R[3,3])>=2:
+            self._isstable = False
         else:
-            mux,betax,alfax,gamax = matrix2twiss(self.R,plane='x')
-            muy,betay,alfay,gamay = matrix2twiss(self.R,plane='y')
-            self.dxy = matrix2disp(self.R).reshape(-1,1)
-            self.twx = np.array([betax,alfax,gamax]).reshape(3,1)
-            self.twy = np.array([betay,alfay,gamay]).reshape(3,1)
-            self.isstable = True
+            mux,self._betax0,self._alfax0,self._gamax0 = matrix2twiss(self.R,plane='x')
+            muy,self._betay0,self._alfay0,self._gamay0 = matrix2twiss(self.R,plane='y')
+            self._etax0,self._etaxp0,self._etay0,self._etayp0 = matrix2disp(self.R)
+            self._isstable = True
 
     def rmattr(self,attrs):
         '''
@@ -2311,6 +2395,116 @@ class cell(beamline):
         s += '\n\n'
         return s
 
+    def rad(self,includeWig=0):
+        '''
+        copy from S. Krinsky's code:
+        Radiation integrals calculated according to Helm, Lee and Morton,
+        IEEE Trans. Nucl. Sc., NS-20, 1973, p900
+        E = energy in GeV
+        N = number of superperiods
+        I = synchrotron integrals [I1,I2,I3,I4,I5]
+        alphac = momentum compaction
+        U0 = energy radiated per turn (keV)
+        Jx,y,e = damping partition factors [Jx = 1-D, Jy = 1, Je = 2+D]
+        tau= Damping time [taux,tauy,taue] (ms)
+        sige = fractional energy spread
+        emitx = horizonat emittance (nm)
+        '''
+        const = 55./(32.*np.sqrt(3))
+        re = 2.817940e-15 #unit:  m
+        lam = 3.861592e-13 #unit: m
+        grel = 1956.95*self.E #E in GeV
+        Ee = 0.510999 #unit: MeV
+        self._I = 5*[0.]
+        for i, elem in enumerate(self.bl):
+            if elem.__class__.__name__ == 'bend':
+                L = elem.L
+                K = elem.K1
+                angle = elem.angle
+                e1 = elem.e1
+                e2 = elem.e2
+                R = elem.R
+                t1 = np.tan(e1)/R
+                t2 = np.tan(e2)/R
+                b0 = self.betax[i]
+                a0 = self.alfax[i]
+                eta0 = self.etax[i]
+                etap0 = self.etaxp[i]
+                etap1 = etap0+eta0*t1
+                a1 = a0-b0*t1
+                g1 = (1+a1**2)/b0
+                if K+1/R**2 > 0:
+                    k = np.sqrt(K+1/R**2)
+                    p = k*L
+                    S = np.sin(p)
+                    C = np.cos(p)
+                    eta2 = eta0*C+etap1*S/k+(1-C)/(R*k**2)
+                    av_eta = eta0*S/p+etap1*(1-C)/(p*k)+(p-S)/(p*k**2*R)
+                    av2 = -K*av_eta/R+(eta0*t1+eta2*t2)/(2.*L*R)
+                    av_H = g1*eta0**2+2*a1*eta0*etap1+b0*etap1**2 + \
+                           (2.*angle)*(-(g1*eta0+a1*etap1)*(p-S)/(k*p**2) + \
+                                       (a1*eta0+b0*etap1)*(1-C)/p**2) + \
+                           angle**2*(g1*(3.*p-4.*S+S*C)/(2.*k**2*p**3) - \
+                                     a1*(1.-C)**2/(k*p**3)+b0*(p-C*S)/(2.*p**3))
+                elif K+1/R**2 < 0:
+                    k = np.sqrt(-K-1/R**2)
+                    p = k*L
+                    S = np.sinh(p)
+                    C = np.cosh(p)
+                    eta2 = eta0*C+etap1*S/k+(1-C)/(-R*k**2)
+                    av_eta = eta0*S/p+etap1*(1-C)/(-p*k)+(p-S)/(-p*k**2*R)
+                    av2 = -K*av_eta/R+(eta0*t1+eta2*t2)/(2.*L*R)
+                    av_H = g1*eta0**2+2*a1*eta0*etap1+b0*etap1**2 + \
+                           (2.*angle)*(-(g1*eta0+a1*etap1)*(p-S)/(-k*p**2) + \
+                                    (a1*eta0+b0*etap1)*(1-C)*(-1.)/p**2) + \
+                           angle**2*(g1*(3.*p-4.*S+S*C)/(2.*k**2*p**3) - \
+                                     a1*(1.-C)**2/(k*p**3)+b0*(p-C*S)/(-2.*p**3))
+                else:
+                    print('1/R**2+K1 == 0, not implemented')
+                    pass
+                self._I[0] += L*av_eta/R
+                self._I[1] += L/R**2
+                self._I[2] += L/abs(R)**3
+                self._I[3] += L*av_eta/R**3-2.*L*av2
+                self._I[4] += L*av_H/abs(R)**3
+        self._alphac = self.I[0]/self.L
+        self._U0 = 666.66*re*Ee*grel**4*self.I[1]
+        self._D = self.I[3]/self.I[1]
+        self._Jx = 1-self.D
+        self._Jy = 1.
+        self._Je = 2+self.D
+        self._tau0 = 3*self.L*1e3/(re*csp*grel**3*self.I[1])
+        self._taux = self.tau0/self.Jx
+        self._tauy = self.tau0
+        self._taue = self.tau0/self.Je
+        self._sige = np.sqrt(const*lam*grel**2*self.I[2]/(2.*self.I[1]+self.I[3])) 
+        self._emitx = const*lam*grel**2*(self.I[4]/(self.I[1]-self.I[3]))*1e9 #nm
+        self._emity = self.emitx*self.kcouple/(1+self.kcouple) #nm
+        self._sigx =[np.sqrt(self.betax[m]*self.emitx*1e-9) + 
+                     abs(self.etax[m])*self.sige for m in range(len(self.s))]
+        self._sigy =[np.sqrt(self.betay[m]*self.emity*1e-9) 
+                     for m in range(len(self.s))]
+        if includeWig:
+            # --- S.Y. Lee's book formulae
+            Uw,u3,u2 = 0,0,0
+            dwIndex = self.getIndex('kmap',prefix='dw',exitport=0)
+            E0 = self.bl[dwIndex[0]].E
+            rho = 88.5*E0**4/self.U0
+            for i in dwIndex:
+                dw = self.bl[i]
+                rhow = dw.E*1e9/csp/dw.Bw
+                Uwi = 88.5*E0**4*dw.L/(2*twopi*rhow**2)
+                Uw += Uwi
+                u3 += 8*rho*Uwi/3/np.pi/rhow/self.U0
+                u2 += Uwi/self.U0
+            self.Uw = Uw
+            self.Ut = self.U0+self.Uw
+            self.emitxw = self.emitx/(1+self.Uw/self.U0)
+            self.sigew = self.sige*np.sqrt((1.+u3)/(1.+u2))
+            self.tauw = self.tau0*self.U0/self.Ut
+            self.tauxw = self.tauw/self.Jx
+            self.tauyw = self.tauw
+            self.tauew = self.tauw/self.Je
 
     def findClosedOrbit(self, niter=50,fixedenergy=0.0,
                         tol=[1e-6,1e-7,1e-6,1e-7,1e-6,1e-6],
@@ -2326,7 +2520,7 @@ class cell(beamline):
         x0 = np.zeros(6)
         x0[5] = fixedenergy
         for i in range(niter):
-            x1all = self.eletrack(x0,sym4=sym4)
+            x1all = self.eletrack(x0)
             x1 = x1all[-1][:,0]
             if abs(x0[0]-x1[0])<=tol[0] and \
                abs(x0[1]-x1[1])<=tol[1] and \
@@ -2394,6 +2588,7 @@ class cell(beamline):
         self.hodisp = disp
         self.hoalpha = alpha/self.L
 
+    # --- linear coupling 
     def coupledTwiss(self):
         '''
         calculated Twiss functions (four Betas)  with linear coupling
@@ -2405,7 +2600,7 @@ class cell(beamline):
         bag,bagName = vect2beta(v0)
         bagx_I,bagy_I,bagx_II,bagy_II = bag[:,0],bag[:,1],bag[:,2],bag[:,3]
         for ele in self.bl:
-            v1 = ele.tm[:4,:4]*v0
+            v1 = ele.tm[:4,:4].dot(v0)
             t,tn = vect2beta(v1)
             bagx_I = np.append(bagx_I,t[:,0],axis=1)
             bagy_I = np.append(bagy_I,t[:,1],axis=1)
@@ -2420,60 +2615,101 @@ class cell(beamline):
         self.twy_II[3] = monoPhase(self.twy_II[3])
 
 
-    def pltcoupledtwiss(self):
+    def coupledemit(self):
+        '''
+        calculated Twiss functions (four Betas)  with linear coupling
+        twx(y)_I(II): beta-alfa-gama-phase
+        '''
+        Cq = 3.832e-13
+        gamma = self.E*1e3/0.5109989461
+        l0,v0 = np.linalg.eig(self.R[:4,:4])
+        Hx_I,Hx_II,Hy_I,Hy_II = 0,0,0,0
+        I2,I4_I,I4_II = 0,0,0
+        for i,ele in enumerate(self.bl):
+            if ele.__class__.__name__ != 'bend':
+                v1 = ele.tm[:4,:4].dot(v0)
+                v0 = v1
+            else:
+                s,w = gint(0.,ele.L)
+                b,a,g = [],[],[]
+                dx,dxp,dy,dyp = [],[],[],[]
+                for si in s:
+                    if si == ele.L:
+                        fe = bend(L=ele.L,K1=ele.K1,angle=ele.angle,
+                                  e1=ele.e1,e2=ele.e2)
+                    elif si < ele.L:
+                        fe = bend(L=si,K1=ele.K1,angle=ele.angle*si/ele.L,e1=ele.e1)
+                    vm = fe.tm[:4,:4].dot(v0)
+                    t = np.array(vect2beta(vm)[0])
+                    # --- twiss inside bend
+                    b.append(t[0])
+                    a.append(t[1])
+                    g.append(t[2])
+                    # --- dispersion
+                    mxy,tx,ty = twmat(ele,si)
+                    dxy = mxy.dot(self._dxy[:,i])
+                    dx.append(dxy[0])
+                    dxp.append(dxy[1])
+                    dy.append(dxy[2])
+                    dyp.append(dxy[3])
+                b = np.array(b)
+                a = np.array(a)
+                g = np.array(g)
+                bx_I,ax_I,gx_I = b[:,0],a[:,0],g[:,0]
+                by_I,ay_I,gy_I = b[:,1],a[:,1],g[:,1]
+                bx_II,ax_II,gx_II = b[:,2],a[:,2],g[:,2]
+                by_II,ay_II,gy_II = b[:,3],a[:,3],g[:,3]
+                I4_I += sum(w*dx/ele.R*(1/ele.R**2+2*ele.K1))
+                I4_II += sum(w*dy/ele.R*(1/ele.R**2+2*ele.K1))
+                Hx_I += sum(w*(gx_I*dx*dx+2*ax_I*dx*dxp+bx_I*dxp*dxp)/ele.R**3)
+                Hy_I += sum(w*(gy_I*dy*dy+2*ay_I*dy*dyp+by_I*dyp*dyp)/ele.R**3)
+                Hx_II += sum(w*(gx_II*dx*dx+2*ax_II*dx*dxp+bx_II*dxp*dxp)/ele.R**3)
+                Hy_II += sum(w*(gy_II*dy*dy+2*ay_II*dy*dyp+by_II*dyp*dyp)/ele.R**3)
+                I2 += ele.L/ele.R**2
+                v1 = ele.tm[:4,:4].dot(v0)
+                v0 = v1
+        #print "x_I,x_II: ",Hx_I/(I2-I4_I)*Cq*gamma**2*1e9,Hx_II/(I2-I4_II)*Cq*gamma**2*1e9
+        #print "y_I,y_II: ",Hy_I/(I2-I4_I)*Cq*gamma**2*1e9,Hy_II/(I2-I4_II)*Cq*gamma**2*1e9
+        #self.emitx_c = Hx_I/(I2-I4_I)*Cq*gamma**2*1e9+Hx_II/(I2-I4_II)*Cq*gamma**2*1e9
+        #self.emity_c = Hy_I/(I2-I4_I)*Cq*gamma**2*1e9+Hy_II/(I2-I4_II)*Cq*gamma**2*1e9
+        self.emit_I = (Hx_I/(I2-I4_I)+Hy_I/(I2-I4_I))*Cq*gamma**2*1e9
+        self.emit_II = (Hy_II/(I2-I4_II)+Hy_II/(I2-I4_II))*Cq*gamma**2*1e9
+
+    def pltcoupledtwiss(self,figsize=(15,5),savefn=None,lw=2,surflvl=0):
         '''
         plot coupled beta-functions
         '''
         if not hasattr(self,'twx_I'):
             self.coupledTwiss()
-        plt.figure(figsize=(20,12))
+        plt.figure(figsize=figsize)
         plt.subplot(211)
-        plt.plot(self.s,self.twx_I[0],'b',label=r'$\beta_{x,I}$')
-        plt.plot(self.s,self.twy_II[0],'r',label=r'$\beta_{y,II}$')
-        self.pltmag(unit=max(self.twx_I[0])/20,surflvl=0)
-        plt.xlabel('s (m)')
-        plt.ylabel(r'$\beta (m)$')
+        plt.plot(self.s,self.twx_I[0],'b',label=r'$\beta_{x,I}$',lw=lw)
+        plt.plot(self.s,self.twy_II[0],'r',label=r'$\beta_{y,II}$',lw=lw)
+        self.pltmag(unit=max(self.twx_I[0])/20,surflvl=surflvl)
+        plt.xlabel('s (m)',fontsize=15)
+        plt.ylabel(r'$\beta (m)$',fontsize=15)
         plt.legend(bbox_to_anchor=(0, 1.005, 1, .1), loc=3,
                    ncol=2, mode="expand",borderaxespad=0.)
         plt.subplot(212)
-        plt.plot(self.s,self.twx_II[0],'b',label=r'$\beta_{x,II}$')
-        plt.plot(self.s,self.twy_I[0],'r',label=r'$\beta_{y,I}$')
-        self.pltmag(unit=max(self.twx_II[0])/20,surflvl=0)
-        plt.xlabel('s (m)')
-        plt.ylabel(r'$\beta (m)$')
+        plt.plot(self.s,self.twx_II[0],'b',label=r'$\beta_{x,II}$',lw=lw)
+        plt.plot(self.s,self.twy_I[0],'r',label=r'$\beta_{y,I}$',lw=lw)
+        self.pltmag(unit=max(self.twx_II[0])/20,surflvl=surflvl)
+        plt.xlabel('s (m)',fontsize=15)
+        plt.ylabel(r'$\beta (m)$',fontsize=15)
         plt.legend(bbox_to_anchor=(0, 1.005, 1, .1), loc=3,
                    ncol=2, mode="expand",borderaxespad=0.)
+        if savefn:
+            plt.savefig(savefn)
         plt.show()
 
-
-    def getOneTurnMatrix(self,index=0):
+    def getOneTurnMatrix(self,idx=0):
         '''
         get one turn linear matrix starting from given index, 0 by default
         '''
-        R = np.mat(np.eye(6))
-        for elem in self.bl[index:]:
-            R = elem.tm*R
-        for elem in self.bl[0:index]:
-            R = elem.tm*R
-        return R
-
-
-    def getP2PMatrix(self,i0,i1):
-        '''
-        get point to point transfer matrix:
-        '''
-        R = np.mat(np.eye(6))
-        if i1 >= i0:
-            for elem in self.bl[i0:i1]:
-                R = elem.tm*R
-            return R
-        if i1 < i0:
-            for elem in self.bl[i0:]:
-                R = elem.tm*R
-            for elem in self.bl[:i1]:
-                R = elem.tm*R
-            return R
-
+        tmlist1 = [e.tm for e in self.bl[idx:]]
+        tmlist2 = [e.tm for e in self.bl[:idx]]
+        tmlist = tmlist1+tmlist2
+        return reduce(np.dot,tmlist[::-1])
 
     def getf2vsskew(self,index=[0],skews=[],dk=0.001,verbose=0):
         '''
@@ -2527,7 +2763,6 @@ class cell(beamline):
         self.h1001irm = h1001i
         self.update()
 
-
     def getCouplingResponseMatrix(self,index=[0],skews=[],dk=0.001,verbose=0):
         '''
         one turn matrix vs. skew response matrix
@@ -2561,119 +2796,8 @@ class cell(beamline):
         self.lcrm = rm
         self.update()
         return rm,R0
-            
 
-    def rad(self,includeWig=0):
-        '''
-        copy from S. Krinsky's code:
-        Radiation integrals calculated according to Helm, Lee and Morton,
-        IEEE Trans. Nucl. Sc., NS-20, 1973, p900
-        E = energy in GeV
-        N = number of superperiods
-        I = synchrotron integrals [I1,I2,I3,I4,I5]
-        alphac = momentum compaction
-        U0 = energy radiated per turn (keV)
-        Jx,y,e = damping partition factors [Jx = 1-D, Jy = 1, Je = 2+D]
-        tau= Damping time [taux,tauy,taue] (ms)
-        sige = fractional energy spread
-        emitx = horizonat emittance (nm)
-        '''
-        const = 55./(32.*np.sqrt(3))
-        re = 2.817940e-15 #unit:  m
-        lam = 3.861592e-13 #unit: m
-        grel = 1956.95*self.E #E in GeV
-        Ee = 0.510999 #unit: MeV
-        self.I = 5*[0.]
-        for i, elem in enumerate(self.bl):
-            if elem.__class__.__name__ == 'bend':
-                L = elem.L
-                K = elem.K1
-                angle = elem.angle
-                e1 = elem.e1
-                e2 = elem.e2
-                R = elem.R
-                t1 = np.tan(e1)/R
-                t2 = np.tan(e2)/R
-                b0 = self.twx[0,i]
-                a0 = self.twx[1,i]
-                eta0 = self.etax[i]
-                etap0 = self.etaxp[i]
-                etap1 = etap0+eta0*t1
-                a1 = a0-b0*t1
-                g1 = (1+a1**2)/b0
-                if K+1/R**2 > 0:
-                    k = np.sqrt(K+1/R**2)
-                    p = k*L
-                    S = np.sin(p)
-                    C = np.cos(p)
-                    eta2 = eta0*C+etap1*S/k+(1-C)/(R*k**2)
-                    av_eta = eta0*S/p+etap1*(1-C)/(p*k)+(p-S)/(p*k**2*R)
-                    av2 = -K*av_eta/R+(eta0*t1+eta2*t2)/(2.*L*R)
-                    av_H = g1*eta0**2+2*a1*eta0*etap1+b0*etap1**2 + \
-                           (2.*angle)*(-(g1*eta0+a1*etap1)*(p-S)/(k*p**2) + \
-                                       (a1*eta0+b0*etap1)*(1-C)/p**2) + \
-                           angle**2*(g1*(3.*p-4.*S+S*C)/(2.*k**2*p**3) - \
-                                     a1*(1.-C)**2/(k*p**3)+b0*(p-C*S)/(2.*p**3))
-                elif K+1/R**2 < 0:
-                    k = np.sqrt(-K-1/R**2)
-                    p = k*L
-                    S = np.sinh(p)
-                    C = np.cosh(p)
-                    eta2 = eta0*C+etap1*S/k+(1-C)/(-R*k**2)
-                    av_eta = eta0*S/p+etap1*(1-C)/(-p*k)+(p-S)/(-p*k**2*R)
-                    av2 = -K*av_eta/R+(eta0*t1+eta2*t2)/(2.*L*R)
-                    av_H = g1*eta0**2+2*a1*eta0*etap1+b0*etap1**2 + \
-                           (2.*angle)*(-(g1*eta0+a1*etap1)*(p-S)/(-k*p**2) + \
-                                    (a1*eta0+b0*etap1)*(1-C)*(-1.)/p**2) + \
-                           angle**2*(g1*(3.*p-4.*S+S*C)/(2.*k**2*p**3) - \
-                                     a1*(1.-C)**2/(k*p**3)+b0*(p-C*S)/(-2.*p**3))
-                else:
-                    print('1/R**2+K1 == 0, not implemented')
-                    pass
-                self.I[0] += L*av_eta/R
-                self.I[1] += L/R**2
-                self.I[2] += L/abs(R)**3
-                self.I[3] += L*av_eta/R**3-2.*L*av2
-                self.I[4] += L*av_H/abs(R)**3
-        LSUP = self.s[-1]
-        self.alphac = self.I[0]/LSUP
-        self.U0 = self.N*666.66*re*Ee*grel**4*self.I[1]
-        self.D = self.I[3]/self.I[1]
-        self.Jx = 1-self.D
-        self.Jy = 1.
-        self.Je = 2+self.D
-        self.tau0 = 3*LSUP*1e3/(re*csp*grel**3*self.I[1])
-        self.taux = self.tau0/self.Jx
-        self.tauy = self.tau0
-        self.taue = self.tau0/self.Je
-        self.sige = np.sqrt(const*lam*grel**2*self.I[2]/(2.*self.I[1]+self.I[3])) 
-        self.emitx = const*lam*grel**2*(self.I[4]/(self.I[1]-self.I[3]))*1e9 #nm
-        self.emity = self.emitx*self.kcouple/(1+self.kcouple) #nm
-        self.sigx =[np.sqrt(self.betax[m]*self.emitx*1e-9) + 
-                    abs(self.etax[m])*self.sige for m in range(len(self.s))]
-        self.sigy =[np.sqrt(self.twy[0,m]*self.emity*1e-9) 
-                    for m in range(len(self.s))]
-        if includeWig:
-            # --- S.Y. Lee's book formulae
-            Uw,u3,u2 = 0,0,0
-            dwIndex = self.getIndex('kmap',prefix='dw',exitport=0)
-            E0 = self.bl[dwIndex[0]].E
-            rho = 88.5*E0**4/self.U0
-            for i in dwIndex:
-                dw = self.bl[i]
-                rhow = dw.E*1e9/csp/dw.Bw
-                Uwi = 88.5*E0**4*dw.L/(2*twopi*rhow**2)
-                Uw += Uwi
-                u3 += 8*rho*Uwi/3/np.pi/rhow/self.U0
-                u2 += Uwi/self.U0
-            self.Uw = Uw
-            self.Ut = self.U0+self.Uw
-            self.emitxw = self.emitx/(1+self.Uw/self.U0)
-            self.sigew = self.sige*np.sqrt((1.+u3)/(1.+u2))
-            self.tauw = self.tau0*self.U0/self.Ut
-            self.tauxw = self.tauw/self.Jx
-            self.tauyw = self.tauw
-            self.tauew = self.tauw/self.Je
+    # --- end of linear coupling
 
     def synosc(self,verbose=False):
         '''
@@ -3898,7 +4022,7 @@ class cell(beamline):
         xin[5] = dp
         tbt = np.zeros((nturn,6,nx*ny))
         for i in xrange(nturn):
-            xin[:6] = self.eletrack(xin[:6],sym4=1)[-1]
+            xin[:6] = self.eletrack(xin[:6])[-1]
             tbt[i] = np.array(xin[:6])
             if verbose:
                 sys.stdout.write('\r--- tracking: %04i out of %04i is being done (%3i%%) ---'%
@@ -4083,7 +4207,7 @@ class cell(beamline):
         xin[5] = de
         tbt = np.zeros((nturn,6,nde))
         for i in xrange(nturn):
-            xin[:6] = self.eletrack(xin[:6],sym4=1)[-1]
+            xin[:6] = self.eletrack(xin[:6])[-1]
             tbt[i] = np.array(xin[:6])
             sys.stdout.write(
                 '\r--- tracking: %04i out of %04i is being done (%3i%%) ---'
@@ -4153,7 +4277,7 @@ class cell(beamline):
             xin[0] = nA*[sA]
         tbt = np.zeros((nturn,6,nA))
         for i in xrange(nturn):
-            xin[:6] = self.eletrack(xin[:6],sym4=1)[-1]
+            xin[:6] = self.eletrack(xin[:6])[-1]
             tbt[i] = np.array(xin[:6])
             sys.stdout.write(
                 '\r--- tracking: %04i out of %04i is being done (%3i%%) ---'
@@ -4226,7 +4350,7 @@ class cell(beamline):
         xin[2] = dAy
         tbt = np.zeros((nturn,6,nA))
         for i in xrange(nturn):
-            xin[:6] = self.eletrack(xin[:6],sym4=1)[-1]
+            xin[:6] = self.eletrack(xin[:6])[-1]
             tbt[i] = np.array(xin[:6])
             sys.stdout.write(
                 '\r--- tracking: %04i out of %04i is being done (%3i%%) ---'
@@ -4307,7 +4431,7 @@ class cell(beamline):
         xin[5] = ygrid.flatten()
         tbt = np.zeros((nturn,6,nx*nd))
         for i in xrange(nturn):
-            xin[:6] = self.eletrack(xin[:6],sym4=1)[-1]
+            xin[:6] = self.eletrack(xin[:6])[-1]
             tbt[i] = np.array(xin[:6])
             if verbose:
                 sys.stdout.write('\r--- tracking: %04i out of %04i is being done (%3i%%) ---'%
@@ -4491,7 +4615,8 @@ def micado(x,rm,n=1,verbose=False):
 
 def rotmat(angle=np.pi/4):
     '''
-    rotating matrix
+    rotating matrix with a given angle
+    facing the beam, rotate counter-clockwise is defined as positive
     '''
     c = np.cos(angle)
     s = np.sin(angle)
@@ -4503,7 +4628,6 @@ def rotmat(angle=np.pi/4):
     m[2,0] = -s
     m[3,1] = -s
     return m
-
 
 def gint(a,b):
     '''
@@ -4552,9 +4676,9 @@ def twmat(elem,s):
         fe = wigg(L=s,Bw=elem.Bw,E=elem.E)
     else:
         raise RuntimeError('unknown type for element "%s"'%elem.name)
-    mx = np.take(np.take(fe.tm,[0,1,5],axis=0),[0,1,5],axis=1)
-    my = np.take(np.take(fe.tm,[2,3,5],axis=0),[2,3,5],axis=1)
-    return mx,my,fe.tx,fe.ty
+    mxy = np.take(np.take(fe.tm,[0,1,2,3,5],axis=0),[0,1,2,3,5],axis=1)
+    #my = np.take(np.take(fe.tm,[2,3,5],axis=0),[2,3,5],axis=1)
+    return mxy,fe.tx,fe.ty
 
 
 def twisstrans(twissmatrix,twiss0):
@@ -4620,7 +4744,8 @@ def matrix2disp(R):
     '''
     a = R[:4,:4]-np.eye(4)
     b = -R[:4,5]
-    return np.append(np.linalg.solve(a,b),1)
+    dxy = np.linalg.solve(a,b)
+    return dxy[0],dxy[1],dxy[2],dxy[3]
 
 
 def txt2latt(fn,verbose=False):
@@ -4880,241 +5005,6 @@ def printmatrix(m,format='%9.6f',sep=' '):
         arow = tuple([m[i,j] for j in range(col)])
         print(col*(format+sep+' '))%arow
 
-
-def elempassSym4(ele,x0,nsk=4):
-    '''
-    4th order symplectic element pass
-    #abondonde
-    '''
-    a =  0.6756035959798286638
-    b = -0.1756035959798286639
-    g =  1.351207191959657328
-    d = -1.702414383919314656
-
-    x = np.mat(np.array(x0,dtype=float)).reshape(6,-1)
-    nsk = int(nsk)
-    
-    if ele.Dx != 0:
-        x[0] -= ele.Dx
-    if ele.Dy != 0:
-        x[2] -= ele.Dy
-    if ele.Dphi != 0:
-        x = rotmat(ele.Dphi)*x
-
-    if ele.__class__.__name__ in ['bend','quad','sext']:
-        Ma = np.mat(np.eye(6))
-        Ma[0,1] = a*ele.L/nsk
-        Ma[2,3] = a*ele.L/nsk
-        Mb = np.mat(np.eye(6))
-        Mb[0,1] = b*ele.L/nsk
-        Mb[2,3] = b*ele.L/nsk
-        if ele.__class__.__name__ == 'sext':
-            KLg = g*ele.K2*ele.L/nsk
-            KLd = d*ele.K2*ele.L/nsk
-        elif ele.__class__.__name__ == 'quad':
-            KLg = g*ele.K1*ele.L/nsk
-            KLd = d*ele.K1*ele.L/nsk
-        else:
-            pass
-
-        for i in range(nsk):
-            x =  Ma*x
-            if ele.__class__.__name__ == 'sext':
-                x[1] -= KLg/2*(np.multiply(x[0],x[0]) - \
-                               np.multiply(x[2],x[2]))/(1.+x[5])
-                x[3] += KLg*(np.multiply(x[0],x[2]))/(1.+x[5])
-            elif ele.__class__.__name__ == 'quad':
-                x[1] -= KLg*x[0]/(1.+x[5])
-                x[3] += KLg*x[2]/(1.+x[5])
-            else:
-                pass
-            x =  Mb*x
-            if ele.__class__.__name__ == 'sext':
-                x[1] -= KLd/2*(np.multiply(x[0],x[0]) - \
-                               np.multiply(x[2],x[2]))/(1.+x[5])
-                x[3] += KLd*(np.multiply(x[0],x[2]))/(1.+x[5])
-            elif ele.__class__.__name__ == 'quad':
-                x[1] -= KLd*x[0]/(1.+x[5])
-                x[3] += KLd*x[2]/(1.+x[5])
-            else:
-                pass
-            x =  Mb*x
-            if ele.__class__.__name__ == 'sext':
-                x[1] -= KLg/2*(np.multiply(x[0],x[0]) - \
-                               np.multiply(x[2],x[2]))/(1.+x[5])
-                x[3] += KLg*(np.multiply(x[0],x[2]))/(1.+x[5])
-            elif ele.__class__.__name__ == 'quad':
-                x[1] -= KLg*x[0]/(1.+x[5])
-                x[3] += KLg*x[2]/(1.+x[5])
-            else:
-                pass
-            x =  Ma*x
-    if ele.__class__.__name__ == 'kmap':
-        x = kdid(ele.kmap1,elekmap2,ele.E,x,nk=nks)
-
-    if ele.Dphi != 0:
-        x = rotmat(-ele.Dphi)*x
-    if ele.Dy != 0:
-        x[2] += ele.Dy
-    if ele.Dx != 0:
-        x[0] += ele.Dx
-
-    return x
-
-def elempass(ele, x0, nsk=4, nkk=50, nbk=10):
-    '''
-    element pass
-    if element is nonlinear, use kick-drift (sext and kmap)
-    otherwise tracking with linear transport matrix
-    nsk: number of kick in sext (4 by default)
-    nkk: number of kick in kmap (50 by default)
-    nbk: number of kick in combined-function dipole
-    '''
-    x0 = np.mat(np.array(x0,dtype=float)).reshape(6,-1)
-    if ele.Dx != 0:
-        x0[0] -= ele.Dx
-    if ele.Dy != 0:
-        x0[2] -= ele.Dy
-    if ele.Dphi != 0:
-        x0 = rotmat(ele.Dphi)*x0
-    if ele.__class__.__name__ == 'sext':
-        if ele.K2 == 0:
-            x0 = ele.tm*x0
-        else:
-            K2L = ele.K2*ele.L/nsk
-            tm = np.mat(np.eye(6))
-            tm[0,1] = ele.L/(nsk+1)
-            tm[2,3] = ele.L/(nsk+1)
-            x0 = tm*x0
-            for m in range(nsk):
-                x0[1] -= K2L/2*(np.multiply(x0[0],x0[0])\
-                        -np.multiply(x0[2],x0[2]))/(1.+x0[5])
-                x0[3] += K2L*(np.multiply(x0[0],x0[2]))/(1.+x0[5])
-                x0 = tm*x0
-    elif ele.__class__.__name__ == 'kmap':
-        x0 = kdid(ele.kmap1, elekmap2, ele.E, x0, nk=nkk)
-    elif ele.__class__.__name__ == 'kick':
-        tm = np.mat(np.eye(6))
-        if ele.L != 0:
-            tm[0,1] = ele.L/2.
-            tm[2,3] = ele.L/2.
-            x0 = tm*x0
-            x0[1] += ele.hkick
-            x0[3] += ele.vkick
-            x0 = tm*x0
-        else:
-            x0[1] += ele.hkick
-            x0[3] += ele.vkick
-    elif ele.__class__.__name__ == 'bend' and hasattr(ele,'K2'):
-        Ld = ele.L/(nbk+1)
-        ad = ele.angle/(nbk+1)
-        K2L = ele.K2*ele.L/nbk
-        B0 = bend('B0',L=Ld,angle=ad,e1=ele.e1,K1=ele.K1)
-        BM = bend('BM',L=Ld,angle=ad,K1=ele.K1)
-        B1 = bend('B1',L=Ld,angle=ad,e2=ele.e2,K1=ele.K1)
-        # --- entrance
-        x0 = B0.tm*x0
-        # --- middle n-1 kick-drift
-        for i in range(nbk-1):
-            x0[1] -= K2L/2*(np.multiply(x0[0],x0[0])-\
-                     np.multiply(x0[2],x0[2]))/(1.+x0[5])
-            x0[3] += K2L*(np.multiply(x0[0],x0[2]))/(1.+x0[5])
-            x0 = BM.tm*x0
-        # --- last kick plus exit
-        x0[1] -= K2L/2*(np.multiply(x0[0],x0[0])-\
-                 np.multiply(x0[2],x0[2]))/(1.+x0[5])
-        x0[3] += K2L*(np.multiply(x0[0],x0[2]))/(1.+x0[5])
-        x0 = B1.tm*x0
-    else:
-        x0 = ele.tm*x0
-    if ele.Dphi != 0:
-        x0 = rotmat(-ele.Dphi)*x0
-    if ele.Dy != 0:
-        x0[2] += ele.Dy
-    if ele.Dx != 0:
-        x0[0] += ele.Dx
-    return x0
-
-
-def elempassInv(ele, x0, nsk=4, nkk=50, nbk=10):
-    '''
-    element pass inversely
-    if element is nonlinear, use kick-drift (sext and kmap)
-    otherwise tracking with linear transport matrix
-    nsk: number of kick in sext (4 by default)
-    nkk: number of kick in kmap (50 by default)
-    nbk: number of kick in combined-function dipole
-    '''
-    x0 = np.mat(np.array(x0)).reshape(6,-1)
-    if ele.Dx != 0:
-        x0[0] -= ele.Dx
-    if ele.Dy != 0:
-        x0[2] -= ele.Dy
-    if ele.Dphi != 0:
-        x0 = rotmat(ele.Dphi)*x0
-    if ele.__class__.__name__ == 'sext':
-        if ele.K2 == 0:
-            x0 = ele.tm.I*x0
-        else:
-            K2L = ele.K2*ele.L/nsk
-            tm = np.mat(np.eye(6))
-            tm[0,1] = ele.L/(nsk+1)
-            tm[2,3] = ele.L/(nsk+1)
-            x0 = tm.I*x0
-            for m in range(nsk):
-                x0[1] += K2L/2*(np.multiply(x0[0],x0[0])\
-                        -np.multiply(x0[2],x0[2]))/(1.+x0[5])
-                x0[3] -= K2L*(np.multiply(x0[0],x0[2]))/(1.+x0[5])
-                x0 = tm.I*x0
-    elif ele.__class__.__name__ == 'kmap':
-        tm = np.mat(np.eye(6))
-        tm[0,1] = ele.L
-        tm[2,3] = ele.L
-        x0 = tm.I*x0
-        print('inverse element pass not implemeted, using drift')
-    elif ele.__class__.__name__ == 'kick':
-        tm = np.mat(np.eye(6))
-        if ele.L != 0:
-            tm[0,1] = ele.L/2.
-            tm[2,3] = ele.L/2.
-            x0 = tm.I*x0
-            x0[1] -= ele.hkick
-            x0[3] -= ele.vkick
-            x0 = tm.I*x0
-        else:
-            x0[1] -= ele.hkick
-            x0[3] -= ele.vkick
-    elif ele.__class__.__name__ == 'bend' and hasattr(ele,'K2'):
-        Ld = ele.L/(nbk+1)
-        ad = ele.angle/(nbk+1)
-        K2L = ele.K2*ele.L/nbk
-        B0 = bend('B0',L=Ld,angle=ad,e1=ele.e1,K1=ele.K1)
-        BM = bend('BM',L=Ld,angle=ad,K1=ele.K1)
-        B1 = bend('B1',L=Ld,angle=ad,e2=ele.e2,K1=ele.K1)
-        # --- entrance
-        x0 = B1.tm.I*x0
-        # --- middle n-1 kick-drift
-        for i in range(nbk-1):
-            x0[1] += K2L/2*(np.multiply(x0[0],x0[0])-\
-                     np.multiply(x0[2],x0[2]))/(1.+x0[5])
-            x0[3] -= K2L*(np.multiply(x0[0],x0[2]))/(1.+x0[5])
-            x0 = BM.tm.I*x0
-        # --- last kick plus exit
-        x0[1] += K2L/2*(np.multiply(x0[0],x0[0])-\
-                 np.multiply(x0[2],x0[2]))/(1.+x0[5])
-        x0[3] -= K2L*(np.multiply(x0[0],x0[2]))/(1.+x0[5])
-        x0 = B0.tm.I*x0
-    else:
-        x0 = ele.tm.I*x0
-    if ele.Dphi != 0:
-        x0 = rotmat(-ele.Dphi)*x0
-    if ele.Dy != 0:
-        x0[2] += ele.Dy
-    if ele.Dx != 0:
-        x0[0] += ele.Dx
-    return x0
-
-
 def interp2d(x, y, z, xp, yp):
     '''
     a simple 2d linear interpolation
@@ -5328,7 +5218,7 @@ def tm2f2(tm,epslon=1e-6):
     S = symJ(nvar=nd)
     # cm: coefficient matrix of linear part, Hamiltonian f2 = -1/2(v.cm.v^T)
     cm = np.dot(np.linalg.inv(S),lnm2)
-    xi = np.identity(nd,int)
+    xi = np.eye(nd,int)
     xv = np.ones(nd)
     xc = []
     for i in range(nd):
