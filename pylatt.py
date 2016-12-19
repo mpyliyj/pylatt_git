@@ -556,7 +556,7 @@ class kick(drif):
         if not fast:
             x = np.array(x,dtype=float).reshape(6,-1)
         if self.hkick==0 and self.vkick==0:
-            return super(moni,self).sympass4(x)
+            return super(kick,self).sympass4(x)
         if self.tilt != 0:
             x = np.dot(rotmat(self.tilt),x)
         if self.L != 0:
@@ -2028,7 +2028,7 @@ class beamline(object):
         BL = 'BL = ['
         for e in self.bl:
             BL += e.name + ', '
-            if len(BL) > 72:
+            if len(BL) >= 72:
                 fid.write(BL+'\n')
                 BL = '   '
         BL = BL[0:-2] + ']\n'
@@ -2069,7 +2069,7 @@ class beamline(object):
                 continue
             else:
                 linehead += ei.name+', '
-            if len(linehead) > 72:
+            if len(linehead) >= 72:
                 fid.write(linehead+'&\n')
                 linehead = '  '
         fid.write(linehead[:-2]+')\n\n')
@@ -2365,13 +2365,14 @@ class cell(beamline):
         '''
         s = ''
         s += '\n'+'-'*11*11+'\n'
-        s += 11*'%11s'%('s','betax','alfax','mux','etax','etaxp','betay','alfay','muy','etay','etayp')+'\n'
+        s += 11*'%11s'%('s','betax','alfax','mux','etax','etaxp',
+                        'betay','alfay','muy','etay','etayp')+'\n'
         s += '-'*11*11+'\n'
         s += (11*'%11.3e'+'\n')%(self.s[0],self.betax[0],self.alfax[0],self.mux[0], \
-                                self.etax[0],self.etaxp[0],self.betay[0],\
+                                 self.etax[0],self.etaxp[0],self.betay[0],\
                                  self.alfay[0],self.muy[0],self.etay[0],self.etayp[0])
         s += (11*'%11.3e'+'\n')%(self.s[-1],self.betax[-1],self.alfax[-1],self.mux[-1], \
-                                self.etax[-1],self.etaxp[-1],self.betay[-1],\
+                                 self.etax[-1],self.etaxp[-1],self.betay[-1],\
                                  self.alfay[-1],self.muy[-1],self.etay[0],self.etayp[-1])+'\n'
         if hasattr(self,'nus'):
             s += 'Tune: nux = %8.3f, nuy = %8.3f, nus = %8.3f\n'%(self.nux,self.nuy,self.nus)+'\n'
@@ -2394,7 +2395,8 @@ class cell(beamline):
             s += 'fractional energy spread sige = %11.3e\n'%self.sige+'\n'
             s += 'synchrotron radiation integrals\n'
             s += ('-'*5*11+'\n'+5*'%11s')%('I1','I2','I3','I4','I5')+'\n'
-            s += ('-'*5*11+'\n'+5*'%11.3e'+'\n')%(self.I[0],self.I[1],self.I[2],self.I[3],self.I[4])+'\n'
+            s += ('-'*5*11+'\n'+5*'%11.3e'+'\n')%(self.I[0],self.I[1],self.I[2],
+                                                  self.I[3],self.I[4])+'\n'
         if hasattr(self,'h1') or hasattr(self,'h2'):
             s += self.showh12()
         s += '\n\n'
@@ -2511,7 +2513,7 @@ class cell(beamline):
             self.tauyw = self.tauw
             self.tauew = self.tauw/self.Je
 
-    def findClosedOrbit(self, niter=50,fixedenergy=0.0,
+    def findClosedOrbit(self,niter=50,fixedenergy=0,
                         tol=[1e-6,1e-7,1e-6,1e-7,1e-6,1e-6],
                         sym4=True,verbose=False):
         '''
@@ -2519,6 +2521,7 @@ class cell(beamline):
         niter: number of iterations
         tol: tolerance
         so far, logitudinally, only for fixed energy
+        returns: xco,xpco,yco,ypco,isconvergent, and dl (path-length change)
         '''
         isconvergent = False
         x1all = None
@@ -2536,13 +2539,11 @@ class cell(beamline):
             else:
                 x0 = (x0+x1)/2
                 x0[4] = 0.
-                #print(4*'%15.6f'%tuple(x0[:4]))
         if isconvergent:
             xco = x1all[:,0,:][:,0]
             xpco = x1all[:,1,:][:,0]
             yco = x1all[:,2,:][:,0]
             ypco = x1all[:,3,:][:,0]
-
             if verbose:
                 print('closed orbit found after %i iterations'%(i+1))
             return xco,xpco,yco,ypco,isconvergent,x1all[-1,4,0]
@@ -2551,45 +2552,45 @@ class cell(beamline):
             yco = x1all[:,2,:][:,0]
             if verbose:
                 print('max. iteration (%i) reached, no closed orbit found'%niter)
-            return xco,yco,isconvergent,x1all[-1,4,0]
+            return xco,xpco,yco,ypco,isconvergent,x1all[-1,4,0]
 
 
-    def getDispersionWithTracking(self,De=np.linspace(-0.025,0.025,6),deg=4,
-                                  verbose=False,figsize=(20,16)):
+    def getDispersionWithTracking(self,dE=np.linspace(-0.025,0.025,6),deg=3,
+                                  verbose=False,figsize=(15,9)):
         '''
         get higher order dispersion and momentum compactor using
         symplectic tracking
         hodisp: higher order dispersion
         hoalpha: higher order momentom compactor
         '''
-        Xco,Yco,C,Dl = [],[],[],[]
-        for i,de in enumerate(De):
+        Xco,Yco,C,dL = [],[],[],[]
+        for i,de in enumerate(dE):
             if verbose:
                 sys.stdout.write('\r %03i out of %03i: dE = %9.4f'
-                                 %(i+1,len(De),de))
+                                 %(i+1,len(dE),de))
                 sys.stdout.flush()
-            xco,yco,c,dl = self.findClosedOrbit(fixedenergy=de,
-                                                sym4=True,niter=100)
+            xco,xpco,yco,ypco,c,dl = self.findClosedOrbit(fixedenergy=de,
+                                                          sym4=True,niter=100)
             Xco.append(xco)
             Yco.append(yco)
             C.append(c)
-            Dl.append(dl)
+            dL.append(dl)
 
         co123 = np.array(Xco)
-        disp = np.polyfit(De, co123,deg=deg)
+        disp = np.polyfit(dE, co123,deg=deg)
         if verbose:
             plt.figure(figsize=figsize)
             for i,order in enumerate(range(-2,-deg-1,-1)):
                 plt.subplot(deg-1,1,i+1)
-                plt.plot(self.s,disp[order],'b',linewidth=2,
+                plt.plot(self.s,disp[order],'-',linewidth=2,
                          label=r'$\eta_{'+str(i+1)+'}$')
                 if i == 0:
-                    plt.plot(self.s,self.etax,'ko',label='Linear theory')
+                    plt.plot(self.s,self.etax,'o',label='Linear theory')
                 plt.xlabel('s (m)')
                 plt.ylabel(r'$\eta_x (m)$')
                 plt.legend(loc='best')
             plt.show()
-        alpha = np.polyfit(De,Dl,deg=deg)
+        alpha = np.polyfit(dE,dL,deg=deg)
         self.hodisp = disp
         self.hoalpha = alpha/self.L
 
