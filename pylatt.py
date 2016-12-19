@@ -23,6 +23,8 @@ from matplotlib.cbook import flatten
 import matplotlib.patches as mpatches
 from matplotlib.collections import PatchCollection
 import mvp
+from multiprocessing import Process, Queue
+
 
 np.seterr(all='ignore')
 
@@ -2593,6 +2595,37 @@ class cell(beamline):
         alpha = np.polyfit(dE,dL,deg=deg)
         self.hodisp = disp
         self.hoalpha = alpha/self.L
+
+    def disptracking(self,dE=np.linspace(-0.025,0.025,8),deg=3,
+                     verbose=False,figsize=(15,9)):
+        '''
+        multiprocess to get dispersion via tracking
+        '''
+        def f(q,de):
+            xco,xpco,yco,ypco,c,dl = self.findClosedOrbit(
+                fixedenergy=de,sym4=True,niter=100)
+            q.put([de,xco,yco])
+
+        def handler(dE):
+            q = [Queue() for i in range(len(dE))]
+            p = [Process(target=f,args=(qi,de)) for qi,de in zip(q,dE)]
+            [pi.start() for pi in p]
+            result = [qi.get() for qi in q]
+            [pi.join() for pi in p]
+            return result
+
+        result = handler(dE)
+        e,x,y = [],[],[]
+        for a in result:
+            e.append(a[0])
+            x.append(a[1])
+            y.append(a[2])
+        idx = np.argsort(e)
+        e = np.array(e)[idx]
+        x = np.array(x)[idx]
+        y = np.array(y)[idx]
+        self.dispx = np.polyfit(e,x,deg)
+        self.dispy = np.polyfit(e,y,deg)
 
     # --- linear coupling
     def coupledTwiss(self):
