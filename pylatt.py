@@ -32,7 +32,6 @@ np.seterr(all='ignore')
 csp = 299792458.0 # speed of light
 twopi = 2*np.pi
 
-
 class drif(object):
     '''
     class: drif - define a drift space with given name and length
@@ -1082,7 +1081,7 @@ class kmap(drif):
         x[0] += x[1]*dl
         x[2] += x[3]*dl
         S += np.sqrt(1.+np.square(x[1])+np.square(x[3]))*dl
-        for m in range(self.nkick):
+        for m in xrange(self.nkick):
             if self._kmap1:
                 kx = interp2d(self._kmap1['x'],self._kmap1['y'],
                               self._kmap1['kx'],x[0],x[2])
@@ -1101,7 +1100,7 @@ class kmap(drif):
             x[0] += x[1]*dl
             x[2] += x[3]*dl
             S += np.sqrt(1.+np.square(x[1])+np.square(x[3]))*dl
-        x[4] = S-self.L
+        x[4] += S-self.L
         if self.tilt != 0:
             x = rotmat(-self.tilt).dot(x)
         if self.Dy != 0:
@@ -1133,7 +1132,7 @@ class bend(drif):
 
     notice: it can have quadrupole and sextupole gradients integrated
     '''
-    def __init__(self,name='B',L=1,angle=1e-9,\
+    def __init__(self,name='B01',L=1,angle=1e-9,\
                  e1=0,e2=0,K1=0,K2=0,nkick=10,\
                  hgap=0,fint=0.5,Dx=0,Dy=0,tilt=0,tag=[]):
         self.name = str(name)
@@ -2593,8 +2592,8 @@ class cell(beamline):
                 plt.legend(loc='best')
             plt.show()
         alpha = np.polyfit(dE,dL,deg=deg)
-        self.hodisp = disp
-        self.hoalpha = alpha/self.L
+        self.dispx = disp
+        self.alpha = alpha/self.L
 
     def disptracking(self,dE=np.linspace(-0.025,0.025,8),deg=3,
                      verbose=False,figsize=(15,9)):
@@ -2604,7 +2603,7 @@ class cell(beamline):
         def f(q,de):
             xco,xpco,yco,ypco,c,dl = self.findClosedOrbit(
                 fixedenergy=de,sym4=True,niter=100)
-            q.put([de,xco,yco])
+            q.put([de,xco,yco,dl])
 
         def handler(dE):
             q = [Queue() for i in range(len(dE))]
@@ -2615,17 +2614,20 @@ class cell(beamline):
             return result
 
         result = handler(dE)
-        e,x,y = [],[],[]
+        e,x,y,dL = [],[],[],[]
         for a in result:
             e.append(a[0])
             x.append(a[1])
             y.append(a[2])
+            dL.append(a[3])
         idx = np.argsort(e)
         e = np.array(e)[idx]
         x = np.array(x)[idx]
         y = np.array(y)[idx]
+        dL = np.array(dL)[idx]
         self.dispx = np.polyfit(e,x,deg)
         self.dispy = np.polyfit(e,y,deg)
+        self.alpha = np.polyfit(e,dL/self.L,deg)
 
     # --- linear coupling
     def coupledTwiss(self):
