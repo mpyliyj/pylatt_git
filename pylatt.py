@@ -2643,7 +2643,6 @@ class cell(beamline):
         for ele in self.bl:
             v1 = ele.tm[:4,:4].dot(v0)
             t,tn = vect2beta(v1)
-            #print 'append error: ',bagx_I,t[:,0]
             bagx_I.append(t[:,0])
             bagy_I.append(t[:,1])
             bagx_II.append(t[:,2])
@@ -2714,7 +2713,7 @@ class cell(beamline):
         #self.emitx_c = Hx_I/(I2-I4_I)*Cq*gamma**2*1e9+Hx_II/(I2-I4_II)*Cq*gamma**2*1e9
         #self.emity_c = Hy_I/(I2-I4_I)*Cq*gamma**2*1e9+Hy_II/(I2-I4_II)*Cq*gamma**2*1e9
         self.emit_I = (Hx_I/(I2-I4_I)+Hy_I/(I2-I4_I))*Cq*gamma**2*1e9
-        self.emit_II = (Hy_II/(I2-I4_II)+Hy_II/(I2-I4_II))*Cq*gamma**2*1e9
+        self.emit_II = (Hx_II/(I2-I4_II)+Hy_II/(I2-I4_II))*Cq*gamma**2*1e9
 
     def pltcoupledtwiss(self,figsize=(15,5),savefn=None,lw=2,surflvl=0):
         '''
