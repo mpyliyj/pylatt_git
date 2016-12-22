@@ -59,6 +59,20 @@ class drif(object):
     def __repr__(self):
         return '%s: %s,L=%g'%(self.name,self.__class__.__name__,self.L)
 
+    def put(self,field,value):
+        '''
+        update a new value on an instance's attribute
+        usage: instance.put(field_name, new_field_value)
+
+        same as use . operator to modify an instance's attribute
+        '''
+        if hasattr(self,field):
+            setattr(self,field,value)
+            self._update()
+        else:
+            raise RuntimeError("%s has no attribute of %s"
+                               %(self.name,field))
+
     @property
     def L(self):
         return self._L
@@ -2751,21 +2765,18 @@ class cell(beamline):
         tmlist = tmlist1+tmlist2
         return reduce(np.dot,tmlist[::-1])
 
-    def getf2vsskew(self,index=[0],skews=[],dk=0.001,verbose=0):
+    def getf2vsskew(self,index,skews,dk=0.001,verbose=0):
         '''
         coupled f2 coefficients vs. skew response matrix
         '''
         nbpm,nskew = len(index),len(skews)
-        if nskew == 0:
-            skews = self.getElements('skew')
-            nskew = len(skews)
         c1010,c0101 = np.zeros((nbpm,nskew)),np.zeros((nbpm,nskew))
         c0110,c1001 = np.zeros((nbpm,nskew)),np.zeros((nbpm,nskew))
         h1010r,h1010i = np.zeros((nbpm,nskew)),np.zeros((nbpm,nskew))
         h1001r,h1001i = np.zeros((nbpm,nskew)),np.zeros((nbpm,nskew))
         for ik,skew in enumerate(skews):
-            skew.put('K1',dk)
-            self.update()
+            skew.K1 = dk
+            self._update()
             cc1010,cc0101,cc0110,cc1001 = [],[],[],[]
             hh1010r,hh1010i,hh1001r,hh1001i = [],[],[],[]
             for bi in index:
@@ -2780,7 +2791,7 @@ class cell(beamline):
                 hh1010i.append(ih1010i/dk)
                 hh1001r.append(ih1001r/dk)
                 hh1001i.append(ih1001i/dk)
-            skew.put('K1',0)
+            skew.K1 = 0
             c1010[:,ik] = cc1010
             c0101[:,ik] = cc0101
             c0110[:,ik] = cc0110
@@ -2801,14 +2812,12 @@ class cell(beamline):
         self.h1010irm = h1010i
         self.h1001rrm = h1001r
         self.h1001irm = h1001i
-        self.update()
+        self._update()
 
-    def getCouplingResponseMatrix(self,index=[0],skews=[],dk=0.001,verbose=0):
+    def getCouplingResponseMatrix(self,index,skews,dk=0.001,verbose=0):
         '''
         one turn matrix vs. skew response matrix
         '''
-        if len(skews) == 0:
-            skews = self.getElements('skew')
         R0 = []
         for i in index:
             Rt = np.array(self.getOneTurnMatrix(i)[:4,:4])
@@ -2818,8 +2827,8 @@ class cell(beamline):
         nskew = len(skews)
         rm = np.zeros((len(R0),nskew))
         for ik,skew in enumerate(skews):
-            skew.put('K1',dk)
-            self.update()
+            skew.K1 = dk
+            self._update()
             R1 = []
             for i in index:
                 Rt = np.array(self.getOneTurnMatrix(i)[:4,:4])
@@ -2828,13 +2837,13 @@ class cell(beamline):
             R1 = np.array(R1).flatten()
             dRdk = (R1-R0)/dk
             rm[:,ik] = dRdk
-            skew.put('K1',0)
+            skew.K1 = 0
             if verbose:
                 sys.stdout.write('\r --- %04i out of %04i done (%3i%%) ---'\
                                  %(ik+1,nskew,(ik+1)*100./nskew))
                 sys.stdout.flush()
         self.lcrm = rm
-        self.update()
+        self._update()
         return rm,R0
 
     # --- end of linear coupling
@@ -3532,7 +3541,6 @@ class cell(beamline):
         h10020 = complex(0,0)
         h10200 = complex(0,0)
 
-
         for i,ei in enumerate(self.bl):
             if ei.__class__.__name__ == 'sext':
                 bxi,byi,dxi,muxi,muyi = self.twmid(i)
@@ -4205,7 +4213,6 @@ class cell(beamline):
         plt.axis([xmin,xmax,ymin,ymax])
         plt.show()
 
-
     def pltPhaseSpace(self,figsize=(16,6),densityGap=10,fn=None):
         if not hasattr(self,'dyap'):
             print('no turb-by-turn data available')
@@ -4652,7 +4659,6 @@ def micado(x,rm,n=1,verbose=False):
         dk[ki] -= c[i]
     return dk,x
 
-
 def rotmat(angle=np.pi/4):
     '''
     rotating matrix with a given angle
@@ -4684,7 +4690,6 @@ def gint(a,b):
     w = 0.5*(b-a)*v
     return x,w
 
-
 def twmat(elem,s):
     '''
     Computes the transport and twiss matrix for transport
@@ -4699,7 +4704,7 @@ def twmat(elem,s):
        elem.__class__.__name__=='mult':
         fe = drif(L=s)
     elif elem.__class__.__name__ == 'quad':
-        fe = quad(L=s,K1=elem.K1)
+        fe = quad(L=s,K1=elem.K1,tilt=elem.tilt)
     elif elem.__class__.__name__ == 'skew':
         fe = skew(L=s,K1=elem.K1)
     elif elem.__class__.__name__ == 'sole':
@@ -4720,13 +4725,11 @@ def twmat(elem,s):
     #my = np.take(np.take(fe.tm,[2,3,5],axis=0),[2,3,5],axis=1)
     return mxy,fe.tx,fe.ty
 
-
 def twisstrans(twissmatrix,twiss0):
     '''
     get tiwss functions by twiss transport matrix
     '''
     return twissmatrix.dot(twiss0)
-
 
 def phasetrans(m,tw0,neglen=False):
     '''
@@ -4743,7 +4746,6 @@ def phasetrans(m,tw0,neglen=False):
             return dph+0.5
         else:
             return dph
-
 
 def trans2twiss(a):
     '''
@@ -4906,7 +4908,7 @@ def madParse(a,upper=True):
             if 'L=' in rs:
                 L = rs.split('=')[1]
             else:
-                print('  ignored attribute for drif: %s'%rs)
+                print('  ignored attribute for kick: %s'%rs)
         return('%s = latt.kick(\'%s\', L = %s)'%(name,name,L))
     elif at[0] in ['KMAP','UKICKMAP']:
         L = 0
@@ -5026,7 +5028,6 @@ def madParse(a,upper=True):
         print('unknown type in the mad/elegant file: \'%s\''%at[0])
         return
 
-
 def chkap(x,xap=[-1.,1.],yap=[-1.,1.]):
     '''
     check if particles are beyond boundary
@@ -5034,7 +5035,6 @@ def chkap(x,xap=[-1.,1.],yap=[-1.,1.]):
     c1 = np.logical_and(x[0]>xap[0], x[0]<xap[1])
     c2 = np.logical_and(x[2]>yap[0], x[2]<yap[1])
     return np.logical_and(c1,c2)
-
 
 def printmatrix(m,format='%9.6f',sep=' '):
     '''
@@ -5047,7 +5047,7 @@ def printmatrix(m,format='%9.6f',sep=' '):
 
 def interp2d(x, y, z, xp, yp):
     '''
-    a simple 2d linear interpolation
+    a simple 2d linear interpolation used for ID kickmap
     x, y:    1-D array
     z:       2-D array must have a size of y row and x col
     xp, yp:  point to interpolate
@@ -5090,76 +5090,82 @@ def interp2d(x, y, z, xp, yp):
                                (x2-x1)/(y2-y1))
     return zp
 
-
-def optm(beamline,var,con,wgh,xt=1.e-8,ft=1.e-8,
-         mt=1000,mf=1000,disp=0):
+# --- simple optimization used for optics match
+def optm(aline,var,con,wgh,xtol=1.e-8,ftol=1.e-8,
+         maxiter=1000,maxfun=1000,disp=0):
     '''
     parameters optimization for beamline/cell structure
-    beamline: beamline or cell/ring
-    var: varible nested list, var[m][0] MUST be an instance
-         var=[[q1,'K1'],[q1,'K1']], q1 & q2's K1 are vraible
-    con: constraint list. con[m][0] must be an attribute of beamline
-         con=[['betax',0,10.0], ['emitx',5.0]], want betax to be 10m
-         at beamline.s[0], and emitx 5.0nm.rad
-    wgh: weights for constraints [1,10], 1 for betax, 10 for emitx
+    aline: a beamline or cell
+    var:   varible nested list, var[m][0] MUST be an instance
+           var=[[q1,'K1'],[q2,'K1']], q1 & q2's K1 are vraible
+    con:   constraint list. con[m][0] must be an attribute of beamline
+           con=[['betax',0,10.0], ['emitx',5.0]], want betax to be 10m
+           at beamline.s[0], and emitx 5.0nm.rad
+    wgh:   weights for constraints [1,10], 1 for betax, 10 for emitx
+
+    usage: 
+    variable = [[q1,'K1'],[q2,'L']]
+    constraint = [['betax',-1,10],['alfax',-1,0],['etax',-1,0],['nux',0.25]]
+    weight = [1,10,10,1]
+    optm(aline,variable,constraint,weight)
+
+    optimize aline with q1.K1 and q2.L to achive betax=10, alfax=0, etax=0 
+    at the end of aline, with tune is 0.25. 
     '''
+    def goalfun(val,aline,var,con,wgh):
+        '''
+        Goal function for optimization
+        val: variable value list for optimization
+        aline: aline or cell/ring
+        var: varible nested list, var[m][0] MUST be an instance
+             var=[[q1,'K1'],[q1,'K1']], q1 & q2's K1 are vraible
+        con: constraint list. con[m][0] must be an attribute of aline
+             con=[['betax',0,10.0], ['emitx',5.0]], want betax to be 10m
+             at aline.s[0], and emitx 5.0nm.rad
+        wgh: weights for constraints [1,10], 1 for betax, 10 for emitx
+        '''
+        for i,v in enumerate(var):
+            v[0].put(v[1],val[i])
+        if aline.__class__.__name__ == 'beamline':
+            aline._update()
+        elif aline.__class__.__name__ == 'cell':
+            fp = [a[0] for a in con]
+            rlist = ['I','alphac','U0','D','Jx','Jy','Je','tau0','taux',
+                     'tauy','taue','sige','emitx','sigx','sigy']
+            clist = ['chx','chx0','chy','chy0']
+            ra = any([a in rlist for a in fp])
+            ch = any([a in clist for a in fp])
+            aline.update(rad=ra,chrom=ch,verbose=False)
+        if aline.__class__.__name__ == 'cell':
+            if aline.isstable == 0:
+                return 1e69
+        gf = 0.
+        for i,c in enumerate(con):
+            if len(c) == 3:
+                gf += wgh[i]*(c[2]-getattr(aline,c[0])[int(c[1])])**2
+            else:
+                gf += wgh[i]*(c[1]-getattr(aline,c[0]))**2
+        return gf
+
     t0 = time.time()
     if len(con) != len(wgh):
-        raise RuntimeError('constraints and weight are not matched')
+        raise RuntimeError('Length of constraints and weights not matched')
+    # --- get initial value
     val0 = []
-    for i,v in enumerate(var):
-        m = beamline.bl.index(v[0])
-        val0.append(getattr(beamline.bl[m],v[1]))
+    for v in var:
+        val0.append(getattr(v[0],v[1]))
     val0 = np.array(val0)
-    val = opt.fmin(gfun,val0,args=(beamline,var,con,wgh), \
-                   xtol=xt,ftol=ft,maxiter=mt,maxfun=mf,disp=disp)
-    if disp:
-        print('\nOptimized parameters:\n'+21*'-')
-    for i,v in enumerate(var):
-        m = beamline.bl.index(v[0])
-        beamline.bl[m].put(v[1],val[i])
-        if disp:
-            print('%s: %s, %s = %15.6e'%(beamline.bl[m].name, \
-              beamline.bl[m].__class__.__name__, v[1], val[i]))
+    val = opt.fmin(goalfun,val0,args=(aline,var,con,wgh), \
+                   xtol=xtol,ftol=ftol,maxiter=maxiter,
+                   maxfun=maxfun,disp=disp)
     if disp:
         print('\nTotally %.2fs is used for optimization.\n'%(time.time()-t0))
-
-
-def gfun(val,beamline,var,con,wgh):
-    '''
-    Goal function for optimization
-    val: variable value list for optimization
-    beamline: beamline or cell/ring
-    var: varible nested list, var[m][0] MUST be an instance
-         var=[[q1,'K1'],[q1,'K1']], q1 & q2's K1 are vraible
-    con: constraint list. con[m][0] must be an attribute of beamline
-         con=[['betax',0,10.0], ['emitx',5.0]], want betax to be 10m
-         at beamline.s[0], and emitx 5.0nm.rad
-    wgh: weights for constraints [1,10], 1 for betax, 10 for emitx
-    '''
     for i,v in enumerate(var):
-        m = beamline.bl.index(v[0])
-        beamline.bl[m].put(v[1],val[i])
-    if beamline.__class__.__name__ == 'beamline':
-        beamline.update()
-    elif beamline.__class__.__name__ == 'cell':
-        fp = [a[0] for a in con]
-        rlist = ['alphac','U0','D','Jx','Jy','Je','tau0','taux',
-                 'tauy','taue','sige','emitx','sigx']
-        clist = ['chx','chx0','chy','chy0']
-        ra = any([a in rlist for a in fp])
-        ch = any([a in clist for a in fp])
-        beamline.update(rad=ra,chrom=ch,verbose=False)
-    if beamline.__class__.__name__ == 'cell':
-        if beamline.isstable == 0:
-            return 1e69
-    gf = 0.
-    for i,c in enumerate(con):
-        if len(c) == 3:
-            gf += wgh[i]*(c[2]-getattr(beamline,c[0])[int(c[1])])**2
-        else:
-            gf += wgh[i]*(c[1]-getattr(beamline,c[0]))**2
-    return gf
+        v[0].put(v[1],val[i])
+        if disp:
+            print(v[0])
+    aline._update()
+# --- end of simple optimization used for optics match
 
 
 # --- four beta-function theory for linear coupling --- #
@@ -5174,7 +5180,6 @@ def symJ(nvar=4):
         J[2*i+1,2*i] = -1.
     return J
 
-
 def quadrant(sn,cn):
     '''
     calculate angle from its sin and cosin
@@ -5183,18 +5188,15 @@ def quadrant(sn,cn):
     cn: cos(angle)
     return angle normalized by 2*pi
     '''
-    phase = np.arctan2(sn,cn)
-    #if phase < 0:
-    #    phase += twopi
-    return phase/twopi
-
+    return np.arctan2(sn,cn)/twopi
 
 def vect2beta(v):
     '''
     use a 4x4 eigen vectors matrix to calculate all four beta-functions
-    return:
-     bag: beta-alfa-gama for plane x, y and mode I, II
-     bagname: name explanation for output
+
+    returns:
+    bag: beta-alfa-gama for plane x, y and mode I, II
+    bagname: name explanation for output
     ref: Willeke and Ripken, Methods of beam optics, DESY
     '''
     v = np.array(v)
@@ -5235,7 +5237,6 @@ def vect2beta(v):
                      [betay_II,alfay_II,gamay_II,phy_II]]).transpose()
     return (bag,bagName)
 
-
 def monoPhase(ph):
     '''
     make phase advance be monotonic and start from zero
@@ -5249,7 +5250,6 @@ def monoPhase(ph):
     phm -= phm[0]
     return phm
 
-
 def tm2f2(tm,epslon=1e-6):
     '''
     convert transport matrix to linear Hamiltonian f2
@@ -5259,7 +5259,7 @@ def tm2f2(tm,epslon=1e-6):
     S = symJ(nvar=nd)
     # cm: coefficient matrix of linear part, Hamiltonian f2 = -1/2(v.cm.v^T)
     cm = np.dot(np.linalg.inv(S),lnm2)
-    xi = np.eye(nd,int)
+    xi = np.eye(nd,dtype=int)
     xv = np.ones(nd)
     xc = []
     for i in range(nd):
@@ -5274,7 +5274,6 @@ def tm2f2(tm,epslon=1e-6):
     f2 = f2.const(-0.5)*f2
     f2 = f2.chop(epslon)
     return f2
-
 
 def f22tm(f2,truncate=9):
     '''
@@ -5369,8 +5368,8 @@ def f22h2(f2):
     l0,v0 = np.linalg.eig(R[:4,:4])
     bag,bagName = vect2beta(v0)
     bagx_I,bagy_I,bagx_II,bagy_II = bag[:,0],bag[:,1],bag[:,2],bag[:,3]
-    bx,ax = bagx_I[0,0],bagx_I[1,0]
-    by,ay = bagy_II[0,0],bagy_II[1,0]
+    bx,ax = bagx_I[0],bagx_I[1]
+    by,ay = bagy_II[0],bagy_II[1]
     c1010 = f2.pickWithIndex([1,0,1,0])
     c0101 = f2.pickWithIndex([0,1,0,1])
     c0110 = f2.pickWithIndex([0,1,1,0])
@@ -5469,7 +5468,6 @@ def getTuneTbT(xi,rng=[0.,0.5],ith=1,hann=False,
         plt.show()
     return xpk[0],xpk[1],spt1,spt2
 
-
 def naffprod(n,f):
     '''
     give nu, phase, check the different between
@@ -5480,7 +5478,6 @@ def naffprod(n,f):
     f1 = np.sin(np.pi*2*n[0]*i+n[1])
     a = f-sum(f*f1)/sum(f1*f1)*f1
     return sum(a*a)
-
 
 def naff(f,ni=10,nran=3,verbose=0,figsize=(8,5),rng=[0,0.5]):
     '''
