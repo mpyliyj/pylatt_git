@@ -2291,8 +2291,27 @@ class cell(beamline):
         return self._taue
 
     @property
-    def kcouple(self):
+    def Uw(self):
+        return self._Uw
 
+    @property
+    def Ut(self):
+        return self._Ut
+
+    @property
+    def emitxw(self):
+        return self._emitxw
+
+    @property
+    def sigew(self):
+        return self._sigew
+
+    @property
+    def tauw(self):
+        return self._tauw
+
+    @property
+    def kcouple(self):
         return self._kcouple
 
     @kcouple.setter
@@ -2570,78 +2589,139 @@ class cell(beamline):
             return xco,xpco,yco,ypco,isconvergent,x1all[-1,4,0]
 
 
-    def getDispersionWithTracking(self,dE=np.linspace(-0.025,0.025,6),deg=3,
-                                  verbose=False,figsize=(15,9)):
+    def dispersionTrack(self,dE=np.linspace(-0.025,0.025,8),deg=3,mp=True,
+                        verbose=False,figsize=(15,9)):
         '''
         get higher order dispersion and momentum compactor using
         symplectic tracking
-        hodisp: higher order dispersion
-        hoalpha: higher order momentom compactor
+        dE:      delta list
+        deg:     polyfit order
+        mp:      multiprocessing (fast)
+        dispx/y: higher order dispersion
+        alpha:   higher order momentom compactor
         '''
-        Xco,Yco,C,dL = [],[],[],[]
-        for i,de in enumerate(dE):
-            if verbose:
-                sys.stdout.write('\r %03i out of %03i: dE = %9.4f'
-                                 %(i+1,len(dE),de))
-                sys.stdout.flush()
-            xco,xpco,yco,ypco,c,dl = self.findClosedOrbit(fixedenergy=de,
-                                                          sym4=True,niter=100)
-            Xco.append(xco)
-            Yco.append(yco)
-            C.append(c)
-            dL.append(dl)
+        if mp:
+            def f(q,de):
+                xco,xpco,yco,ypco,c,dl = self.findClosedOrbit(
+                    fixedenergy=de,sym4=True,niter=100)
+                q.put([de,xco,yco,dl])
 
-        co123 = np.array(Xco)
-        disp = np.polyfit(dE, co123,deg=deg)
+            def handler(dE):
+                q = [Queue() for i in range(len(dE))]
+                p = [Process(target=f,args=(qi,de)) for qi,de in zip(q,dE)]
+                [pi.start() for pi in p]
+                result = [qi.get() for qi in q]
+                for qi in q:
+                    qi.close()
+                    qi.join_thread()
+                [pi.join() for pi in p]
+                return result
+
+            result = handler(dE)
+            e,x,y,dL = [],[],[],[]
+            for a in result:
+                e.append(a[0])
+                x.append(a[1])
+                y.append(a[2])
+                dL.append(a[3])
+            idx = np.argsort(e)
+            e = np.array(e)[idx]
+            x = np.array(x)[idx]
+            y = np.array(y)[idx]
+            dL = np.array(dL)[idx]
+            self.dispx = np.polyfit(e,x,deg)
+            self.dispy = np.polyfit(e,y,deg)
+            self.alpha = np.polyfit(e,dL/self.L,deg)
+        else:
+            Xco,Yco,C,dL = [],[],[],[]
+            for i,de in enumerate(dE):
+                if verbose:
+                    sys.stdout.write('\r %03i out of %03i: dE = %9.4f'
+                                     %(i+1,len(dE),de))
+                    sys.stdout.flush()
+                xco,xpco,yco,ypco,c,dl = self.findClosedOrbit(fixedenergy=de,
+                                            sym4=True,niter=100)
+                Xco.append(xco)
+                Yco.append(yco)
+                C.append(c)
+                dL.append(dl)
+            Xco = np.array(Xco)
+            Yco = np.array(Yco)
+            dL = np.array(dL)
+            self.dispx = np.polyfit(dE,Xco,deg=deg)
+            self.dispy = np.polyfit(dE,Yco,deg=deg)
+            self.alpha = np.polyfit(dE,dL/self.L,deg=deg)
         if verbose:
             plt.figure(figsize=figsize)
             for i,order in enumerate(range(-2,-deg-1,-1)):
                 plt.subplot(deg-1,1,i+1)
-                plt.plot(self.s,disp[order],'-',linewidth=2,
-                         label=r'$\eta_{'+str(i+1)+'}$')
+                plt.plot(self.s,self.dispx[order],'-',linewidth=2,
+                         label=r'$\eta_{x'+str(i+1)+'}$')
                 if i == 0:
                     plt.plot(self.s,self.etax,'o',label='Linear theory')
                 plt.xlabel('s (m)')
                 plt.ylabel(r'$\eta_x (m)$')
                 plt.legend(loc='best')
             plt.show()
-        alpha = np.polyfit(dE,dL,deg=deg)
-        self.dispx = disp
-        self.alpha = alpha/self.L
 
-    def disptracking(self,dE=np.linspace(-0.025,0.025,8),deg=3,
-                     verbose=False,figsize=(15,9)):
+    def chromTrack(self,dE=np.linspace(-.025,0.025,16),
+                   nturn=516,amp=1e-4,deg=4,tunewindow=0,
+                   crossHalfInt=0,verbose=False,figsize=(8,6)):
         '''
-        multiprocess to get dispersion via tracking
+        get chromaticity by tracking
         '''
-        def f(q,de):
-            xco,xpco,yco,ypco,c,dl = self.findClosedOrbit(
-                fixedenergy=de,sym4=True,niter=100)
-            q.put([de,xco,yco,dl])
-
-        def handler(dE):
-            q = [Queue() for i in range(len(dE))]
-            p = [Process(target=f,args=(qi,de)) for qi,de in zip(q,dE)]
-            [pi.start() for pi in p]
-            result = [qi.get() for qi in q]
-            [pi.join() for pi in p]
-            return result
-
-        result = handler(dE)
-        e,x,y,dL = [],[],[],[]
-        for a in result:
-            e.append(a[0])
-            x.append(a[1])
-            y.append(a[2])
-            dL.append(a[3])
-        idx = np.argsort(e)
-        e = np.array(e)[idx]
-        x = np.array(x)[idx]
-        y = np.array(y)[idx]
-        dL = np.array(dL)[idx]
-        self.dispx = np.polyfit(e,x,deg)
-        self.dispy = np.polyfit(e,y,deg)
-        self.alpha = np.polyfit(e,dL/self.L,deg)
+        #de = np.linspace(demin,demax,int(nde))
+        nde = len(dE)
+        xin = np.zeros((6,nde))
+        #if plane == 'x':
+        xin[0] = nde*[amp]
+        #else:
+        xin[2] = nde*[amp]
+        xin[5] = dE
+        tbt = np.zeros((nturn,6,nde))
+        for i in xrange(nturn):
+            xin = self.eletrack(xin)[-1]
+            tbt[i] = xin
+            sys.stdout.write(
+                '\r--- tracking: %04i out of %04i is being done (%3i%%) ---'
+                %(i+1,nturn,(i+1)*100./nturn))
+            sys.stdout.flush()
+        nu = []
+        if tunewindow:
+            rngx = [self.nux-int(self.nux)-tunewindow,self.nux-int(self.nux)+tunewindow]
+            rngy = [self.nuy-int(self.nuy)-tunewindow,self.nuy-int(self.nuy)+tunewindow]
+        else:
+            rngx,rngy = [0.,1],[0.,1]
+        if crossHalfInt:
+            csm = CSNormalization(self.betax[0],self.alfax[0],
+                                  self.betay[0],self.alfay[0],combine=True)
+        for i in xrange(nde):
+            if crossHalfInt:
+                a0 = np.array(csm*tbt[:,:4,i].transpose())
+                xpw0 = np.fft.fft(a0[0])
+                nu1 = pickPeak(np.abs(xpw0),rng=[0,1])[0]
+                xpw0 = np.fft.fft(a0[1])
+                nu2 = pickPeak(np.abs(xpw0),rng=[0,1])[0]
+                nu.append([dE[i],nu1,nu2])
+            else:
+                nu.append([dE[i],naff(tbt[:,0,i],ni=1,verbose=0,rng=rngx)[0][0],
+                           naff(tbt[:,2,i],ni=1,verbose=0,rng=rngy)[0][0]])
+        nu = np.array(nu)
+        chx = np.polyfit(nu[:,0],nu[:,1],deg)
+        chy = np.polyfit(nu[:,0],nu[:,2],deg)
+        if verbose:
+            nuxfit = np.polyval(chx,nu[:,0])
+            nuyfit = np.polyval(chy,nu[:,0])
+            plt.figure(figsize=figsize)
+            plt.plot(nu[:,0],nuxfit,'b-',label=r"$\xi_{x,1}=%.2f$"%chx[-2],lw=2)
+            plt.plot(nu[:,0],nu[:,1],'bo')
+            plt.plot(nu[:,0],nuyfit,'r-',label=r"$\xi_{y,1}=%.2f$"%chy[-2],lw=2)
+            plt.plot(nu[:,0],nu[:,2],'ro')
+            plt.xlabel(r'$\delta = \frac{\Delta P}{P}$',fontsize=18)
+            plt.ylabel(r'$\nu$',fontsize=18)
+            plt.legend(loc='best',fontsize=18)
+            plt.show()
+        self.chxTrack,self.chyTrack,self.chromTbt = chx,chy,tbt
 
     # --- linear coupling
     def coupledTwiss(self):
@@ -2845,9 +2925,9 @@ class cell(beamline):
         self.lcrm = rm
         self._update()
         return rm,R0
-
     # --- end of linear coupling
 
+    # --- synchrotron oscillation
     def synosc(self,verbose=False):
         '''
         synchrotron oscillation
@@ -2864,7 +2944,10 @@ class cell(beamline):
             vt += rfca.voltage
             freqrf = rfca.freq
         self.Vrf = vt
-        self.phaserf = np.pi-np.arcsin(self.U0*1e3/self.Vrf)
+        if hasattr(self,'Ut'):
+            self.phaserf = np.pi-np.arcsin(self.Ut*1e3/self.Vrf)
+        else:
+            self.phaserf = np.pi-np.arcsin(self.U0*1e3/self.Vrf)
         self.revfreq = csp/self.L
         self.h = int(round(freqrf/self.revfreq))
         self.freqrf = self.h*self.revfreq
@@ -2892,8 +2975,8 @@ class cell(beamline):
             (np.cos(phi)-np.cos(self.phaserf) +
              (phi-self.phaserf)*np.sin(self.phaserf))
         else:
-            if not hasattr(self,'hoalpha'):
-                self.getDispersionWithTracking()
+            if not hasattr(self,'alpha'):
+                self.dispersionTrack()
             H = 1./2*self.h*self.revfreq*self.hoalpha[-2]*dE**2 + \
                 1./3*self.h*self.revfreq*self.hoalpha[-3]*dE**3 + \
                 1./4*self.h*self.revfreq*self.hoalpha[-4]*dE**4 + \
@@ -4239,73 +4322,6 @@ class cell(beamline):
                 plt.show()
 
 
-    def chromTrack(self,demin=-2.5e-2,demax=2.5e-2,nde=51,nturn=256,
-                   plane='x',amp=1e-4,polyorder=4,verbose=False,
-                   tunewindow=0,crossHalfInt=0):
-        '''
-        get chromaticity by tracking
-        '''
-        de = np.linspace(demin,demax,int(nde))
-        xin = np.zeros((6,nde))
-        if plane == 'x':
-            xin[0] = nde*[amp]
-        else:
-            xin[2] = nde*[amp]
-        xin[5] = de
-        tbt = np.zeros((nturn,6,nde))
-        for i in xrange(nturn):
-            xin[:6] = self.eletrack(xin[:6])[-1]
-            tbt[i] = np.array(xin[:6])
-            sys.stdout.write(
-                '\r--- tracking: %04i out of %04i is being done (%3i%%) ---'
-                %(i+1,nturn,(i+1)*100./nturn))
-            sys.stdout.flush()
-        nu = []
-        if tunewindow:
-            rngx = [self.nux-int(self.nux)-tunewindow,self.nux-int(self.nux)+tunewindow]
-            rngy = [self.nuy-int(self.nuy)-tunewindow,self.nuy-int(self.nuy)+tunewindow]
-        else:
-            rngx,rngy = [0.,1],[0.,1]
-        if crossHalfInt:
-            csm = CSNormalization(self.betax[0],self.alfax[0],
-                                  self.betay[0],self.alfay[0],combine=True)
-            '''
-            sqtbx = np.sqrt(self.betax[0])
-            ax = self.alfax[0]
-            sqtby = np.sqrt(self.betay[0])
-            ay = self.alfay[0]
-            m = np.mat([[1/sqtbx,0,0,0],[ax/sqtbx,sqtbx,0,0],
-                        [0,0,1/sqtby,0],[0,0,ay/sqtby,sqtby]])
-            cs = np.mat([[1,-1j,0,0],[0,0,1,-1j]])
-            csm = cs*m
-            '''
-        for i in xrange(nde):
-            if crossHalfInt:
-                a0 = np.array(csm*tbt[:,:4,i].transpose())
-                xpw0 = np.fft.fft(a0[0])
-                nu1 = pickPeak(np.abs(xpw0),rng=[0,1])[0]
-                xpw0 = np.fft.fft(a0[1])
-                nu2 = pickPeak(np.abs(xpw0),rng=[0,1])[0]
-                nu.append([de[i],nu1,nu2])
-            else:
-                nu.append([de[i],naff(tbt[:,0,i],ni=1,verbose=0,rng=rngx)[0][0],
-                           naff(tbt[:,2,i],ni=1,verbose=0,rng=rngy)[0][0]])
-        nu = np.array(nu)
-        chx = np.polyfit(nu[:,0],nu[:,1],polyorder)
-        chy = np.polyfit(nu[:,0],nu[:,2],polyorder)
-        if verbose:
-            nuxfit = np.polyval(chx,nu[:,0])
-            nuyfit = np.polyval(chy,nu[:,0])
-            plt.figure(figsize=(8,6))
-            plt.plot(nu[:,0],nuxfit,'b-',label=r"$\xi_{x,1}=%.2f$"%chx[-2],lw=2)
-            plt.plot(nu[:,0],nu[:,1],'bo')
-            plt.plot(nu[:,0],nuyfit,'r-',label=r"$\xi_{y,1}=%.2f$"%chy[-2],lw=2)
-            plt.plot(nu[:,0],nu[:,2],'ro')
-            plt.xlabel(r'$\delta = \frac{\Delta P}{P}$',fontsize=18)
-            plt.ylabel(r'$\nu$',fontsize=18)
-            plt.legend(loc='best',fontsize=18)
-            plt.show()
-        self.chxTrack,self.chyTrack,self.chromTbt = chx,chy,tbt
 
     def tuneShiftWithAmpTrack(self,Amin=-2e-2,Amax=2e-2,nA=40,
                               nturn=128,plane='x',polyorder=4,
