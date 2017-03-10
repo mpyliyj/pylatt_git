@@ -24,7 +24,7 @@ import matplotlib.patches as mpatches
 from matplotlib.collections import PatchCollection
 import mvp
 from multiprocessing import Process, Queue
-
+import functools
 
 np.seterr(all='ignore')
 
@@ -2103,19 +2103,19 @@ class beamline(object):
         # --- 0 -> 1
         if n[0]>0:
             tmlist = [self.bl[j].tm for j in xrange(n[0])][::-1]
-            alist.append(matr('M%04i'%imat,L=self.s[n[0]],tm=reduce(np.dot,tmlist)))
+            alist.append(matr('M%04i'%imat,L=self.s[n[0]],tm=functools.reduce(np.dot,tmlist)))
             imat += 1
         alist.append(self.bl[n[0]])
         # --- n
         for i,ni in enumerate(n[:-1]):
             tmlist = [self.bl[j].tm for j in xrange(ni+1,n[i+1])][::-1]
-            alist.append(matr('M%04i'%imat,L=self.s[n[i+1]]-self.s[ni+1],tm=reduce(np.dot,tmlist)))
+            alist.append(matr('M%04i'%imat,L=self.s[n[i+1]]-self.s[ni+1],tm=functools.reduce(np.dot,tmlist)))
             imat += 1
             alist.append(self.bl[n[i+1]])
         # --- n -> end
         if n[-1]<len(self.bl)-1:
             tmlist = [self.bl[j].tm for j in xrange(n[-1]+1,len(self.bl))][::-1]
-            alist.append(matr('M%04i'%imat,L=self.L-self.s[n[-1]+1],tm=reduce(np.dot,tmlist)))
+            alist.append(matr('M%04i'%imat,L=self.L-self.s[n[-1]+1],tm=functools.reduce(np.dot,tmlist)))
         return alist
 
     def eletrack(self,x0,startIndex=0,endIndex=None,fast=0):
@@ -2156,12 +2156,12 @@ class beamline(object):
             se = len(self.bl)
         if se > sb:
             tmlist = [e.tm for e in self.bl[sb:se]][::-1]
-            R = reduce(np.dot,tmlist)
+            R = functools.reduce(np.dot,tmlist)
         elif se < sb:
             tmlist1 = [e.tm for e in self.bl[sb:]]
             tmlist2 = [e.tm for e in self.bl[:se]]
             tmlist = tmlist1+tmlist2
-            R = reduce(np.dot,tmlist[::-1])
+            R = functools.reduce(np.dot,tmlist[::-1])
         else:
             R = np.eye(6)
         return R
@@ -2843,7 +2843,7 @@ class cell(beamline):
         tmlist1 = [e.tm for e in self.bl[idx:]]
         tmlist2 = [e.tm for e in self.bl[:idx]]
         tmlist = tmlist1+tmlist2
-        return reduce(np.dot,tmlist[::-1])
+        return functools.reduce(np.dot,tmlist[::-1])
 
     def getf2vsskew(self,index,skews,dk=0.001,verbose=0):
         '''
@@ -5253,7 +5253,7 @@ def vect2beta(v):
                      [betay_II,alfay_II,gamay_II,phy_II]]).transpose()
     return (bag,bagName)
 
-def monoPhase(ph):
+def monoPhase_0(ph):
     '''
     make phase advance be monotonic and start from zero
     '''
@@ -5265,6 +5265,28 @@ def monoPhase(ph):
             phm[i:] += 1
     phm -= phm[0]
     return phm
+
+def monoPhase(ph,quadrant=[],startFromZero=False):
+    '''
+    make phase advance be monotonic and start from zero
+    '''
+    phm = copy.deepcopy(ph)
+    if len(quadrant):
+        intpart = np.zeros_like(quadrant,dtype=float)
+        for i in range(len(quadrant)-1):
+            if quadrant[i] > quadrant[i+1]:
+                intpart[i+1:] += 1.
+        phm += intpart
+    else:
+        n = 0
+        for i in range(1,len(phm)):
+            if phm[i] < phm[i-1]:
+                n += 1
+                phm[i:] += 1
+    if startFromZero:
+        phm -= phm[0]
+    return phm
+
 
 def tm2f2(tm,epslon=1e-6):
     '''
@@ -5510,7 +5532,7 @@ def naff(f,ni=10,nran=3,verbose=0,figsize=(8,5),rng=[0,0.5]):
     if not any(fc):
         return [0.],[0.]
     j = np.arange(len(fc))
-    nfnu,amp = [],[]
+    nfnu,amp,phase = [],[],[]
     for i in xrange(ni):
         nu0 = getTuneTbT(fc,verbose=0,hann=1,rng=rng)[0]
         nu1T,fcT,zzT,reT = [],[],[],[]
@@ -5527,16 +5549,87 @@ def naff(f,ni=10,nran=3,verbose=0,figsize=(8,5),rng=[0,0.5]):
         indexmin = np.argmin(reT)
         fc = fcT[indexmin]
         nfnu.append(nu1T[indexmin][0])
-        amp.append(zzT[indexmin])
+        if zzT[indexmin] < 0:
+            phase.append(nu1T[indexmin][1]-np.pi)
+        else:
+            phase.append(nu1T[indexmin][1])
+        amp.append(abs(zzT[indexmin]))
     if verbose:
         for i in xrange(ni):
-            print('i = %2i:  nu = %10.4f, amp = %12.4e'%(i+1,nfnu[i],amp[i]))
+            print('i=%02i: nu=%10.4f, amp=%12.4e, phi=%12.4e'%(i+1,nfnu[i],amp[i],phase[i]))
         plt.figure(figsize=figsize)
         plt.bar(nfnu,np.abs(amp),width=1e-4)
         plt.axis([0,0.5,0,1.05*max(np.abs(amp))])
         plt.show()
-    return nfnu,amp
+    return nfnu,amp,phase
 # --- END of NAFF
+
+# --- TBT
+def getPhaseTbT(xtbt,muRef=[],nu=None,trng=[0.,0.5],ith=1,hann=True,
+                maskIndex=[],verbose=False,figsize=(10,3)):
+    '''
+    get phase with given TbT data
+    '''
+    x = copy.deepcopy(xtbt)
+    mu0 = copy.deepcopy(muRef)
+    n = len(x)
+    cond = range(n)
+    if len(maskIndex):
+        for mi in maskIndex:
+            cond.remove(mi)
+        x = x[cond]
+        if len(mu0):
+            mu0 = mu0[cond]
+        n = len(x)
+    mu = np.zeros(n)
+    quadrant = np.zeros(n,dtype=int)
+    for ib,xb in enumerate(x):
+        if not nu:
+            nu = getTuneTbT(xb,rng=trng,hann=hann,ith=ith)[0]
+        S,C = 0.,0.
+        twopinu = twopi*nu
+        for i,xi in enumerate(xb):
+            S += xi*np.sin(i*twopinu)
+            C += xi*np.cos(i*twopinu)
+        phi = -np.arctan(S/C)
+        if S<=0 and C<0:
+            phi += np.pi   # --- 2nd quadrant
+            qd = 2
+        elif S>0 and C<0:
+            phi += np.pi   # --- 3rd quadrant
+            qd = 3
+        elif S>0 and C>0:
+            phi += 2*np.pi # --- 4th quadrant
+            qd = 4
+        elif S<0 and C>=0:
+            qd = 1     # --- 1st quadrant
+        else:
+            print('S or C = 0')
+            qd = 0
+        if phi<0:
+            raise RuntimeError('negative phase')
+        mu[ib] = phi/twopi
+        quadrant[ib] = qd
+    mu = monoPhase(mu,quadrant,startFromZero=1)
+    if verbose:
+        phb = mu-(mu0-mu0[0])
+        phbrms = np.sqrt(sum(phb**2)/n)
+        plt.figure(figsize=figsize)
+        if len(mu0):
+            plt.plot(cond,np.mod(mu0-mu0[0],1),'b-s',label='designed')
+        plt.plot(cond,np.mod(mu,1),'g-o',label='measured')
+        plt.annotate(r'$\Delta\phi_{rms}=%.1e\times2\pi$'%phbrms,
+                     xy=(0.5,0.5), xycoords='axes fraction',fontsize=16,
+                     bbox=dict(facecolor='w', alpha=1))
+        plt.xlabel('BPM index (starting from 0)')
+        plt.ylabel(r'$\phi\;(2\pi)$')
+        plt.legend(loc='best')
+        plt.show()
+    return mu
+
+
+# --- END OF TBT
+
 
 def CSNormalization(betax,alfax,betay,alfay,combine=True):
     '''

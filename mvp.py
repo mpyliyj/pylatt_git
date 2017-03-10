@@ -15,9 +15,9 @@ class mvp:
         initial mvp class with index matrix (2d) and coefficient vector (1d)
         '''
         if index0.shape[0] != len(value0):
-            print '# of indexes: {0}; # of values: {1}'.\
-                format(index0.shape[0], value0.shape[0])
-            print 'Error: # of indexes and values are not matched!'
+            print('# of indexes: {0}; # of values: {1}'.\
+                format(index0.shape[0], value0.shape[0]))
+            print('Error: # of indexes and values are not matched!')
             return
         self.index = np.int_(index0)
         self.value = value0
@@ -65,7 +65,7 @@ class mvp:
         na, nc = self.index.shape
         nb, nd = b.index.shape
         if nc != nd:
-            print 'Error: two polynomials dimensions are not matched!'
+            print('Error: two polynomials dimensions are not matched!')
             return
         C = np.zeros((na*nb, nc), int)
         D = np.zeros(na*nb)
@@ -128,7 +128,7 @@ class mvp:
         '''
         na = self.index.shape[1]
         if n > na or n < 1:
-            print 'Error: variable index is out of range!'
+            print('Error: variable index is out of range!')
             return
         # remove the terms without the cooresponding element
         di = np.copy(self.index)
@@ -150,7 +150,7 @@ class mvp:
         '''
         na = self.index.shape[1]
         if n > na or n < 1:
-            print 'Error: variable index is out of range!'
+            print('Error: variable index is out of range!')
             return
         di = np.copy(self.index)
         dv = np.copy(self.value)
@@ -336,7 +336,7 @@ class mvp:
         '''
         n1, n2 = self.index.shape
         if n2 != len(x):
-            print 'Error: dimension are not matched'
+            print('Error: dimension are not matched')
             return
         x0 = 0
         for i in range(n1):
@@ -381,7 +381,7 @@ class mvp:
         notice: ref: A. Chao's note on Lie algebra (9-128)
         '''
         if len(self.value) > 1:
-            print 'Error: mvp is not a monomial!'
+            print('Error: mvp is not a monomial!')
             return
         xn = []
         for i in range(0, self.index.shape[1], 2):
