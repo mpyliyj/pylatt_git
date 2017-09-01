@@ -2,26 +2,59 @@ import numpy as np
 import math
 
 
-class mvp:
+def idx2key(idx):
+    '''
+    convert index array to dict key str
+    '''
+    seq = ["%02i"%i for i in idx]
+    return ":".join(seq)
+
+def key2idx(key):
+    '''
+    convert dict key str to index array
+    '''
+    return np.array(key.split(":"),dtype=int)
+
+
+class mvp(object):
     '''
     multi-variables polynomial class
     use:   mvp(index, value)
     index: variable index matrix
     value: coefficient vector
     '''
-
     def __init__(self, index0, value0):
         '''
         initial mvp class with index matrix (2d) and coefficient vector (1d)
         '''
+        index0 = np.array(index0,dtype=int)
         if index0.shape[0] != len(value0):
-            print('# of indexes: {0}; # of values: {1}'.\
-                format(index0.shape[0], value0.shape[0]))
-            print('Error: # of indexes and values are not matched!')
-            return
-        self.index = np.int_(index0)
-        self.value = value0
+            print('index length: {0}; value length: {1}'.\
+                format(index0.shape[0], len(value0)))
+            raise RuntimeError('length of index and value not match!')
+        self.value = np.array(value0)
+        self.index = index0
 
+
+    def simplify(self):
+        '''
+        generate a dict based on given index and value
+        '''
+        adict = {}
+        for i,idx in enumerate(self.index):
+            akey = idx2key(idx)
+            if  akey in adict:
+                adict[akey] += self.value[i]
+            else:
+                adict[akey] = self.value[i]
+        S = len(adict)
+        idx,value = [],[]
+        for k in adict:
+            idx.append(key2idx(k))
+            value.append(adict[k])
+        self.index = np.array(idx,dtype=int)
+        self.value = np.array(value)
+            
 
     def __repr__(self):
         '''
@@ -36,7 +69,7 @@ class mvp:
         return s
 
 
-    def simplify(self):
+    def simplify_1(self):
         '''
         Combine like terms in the polynomial to simplify
         use: a.simplify(),  where a is a mvp
